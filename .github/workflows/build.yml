@@ -1,3 +1,4 @@
+
 name: Build NDS
 
 on: workflow_dispatch
@@ -13,18 +14,27 @@ jobs:
       - name: Build
         run: |
           git clone --depth 1 https://github.com/devkitPro/nds-examples.git
+
           T=$(find nds-examples/templates -type d -name arm9 | head -n1)
+
           cp -r "$T" proj
+
+          sed -i 's/^TARGET :=.*/TARGET := rumble-forest-ds/' proj/Makefile
           sed -i 's/^LIBS := -lnds9$/LIBS := -lnds9 -lm/' proj/Makefile
+
           rm -f proj/source/*
           cp main.c textures.h proj/source/
+
           make -C proj
-          echo "=== SEARCHING FOR NDS FILES ==="
+
+          echo "=== SEARCHING FOR OUTPUT FILES ==="
           find proj -type f
+
           echo "=== ROOT FILES ==="
           ls -la proj
 
       - uses: actions/upload-artifact@v4
         with:
           name: rumble-forest-ds
-          path: proj/**/*.nds
+          path: proj/*.nds
+          if-no-files-found: error

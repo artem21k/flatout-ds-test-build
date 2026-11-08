@@ -24,11 +24,13 @@ jobs:
 
           sed -i 's|^LIBS := -lnds9$|LIBS := -lnds9 -lm|' proj/Makefile
 
+          sed -i 's|@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile|@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile $(OUTPUT).nds|' proj/Makefile
+
           rm -f proj/source/*
           cp main.c textures.h proj/source/
 
-          echo "=== MAKEFILE ==="
-          grep -n 'TARGET\|OUTPUT\|LIBS' proj/Makefile
+          echo "=== VERIFY MAKEFILE ==="
+          grep -n 'OUTPUT.*nds\|LIBS :=' proj/Makefile
 
           echo "=== CLEAN ==="
           make -C proj TARGET=rumble-forest-ds clean

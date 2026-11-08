@@ -11,11 +11,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build
+      - name: Build NDS ROM
         run: |
           git clone --depth 1 https://github.com/devkitPro/nds-examples.git
 
           T=$(find nds-examples/templates -type d -name arm9 | head -n1)
+          test -n "$T"
 
           cp -r "$T" proj
 
@@ -25,16 +26,16 @@ jobs:
           rm -f proj/source/*
           cp main.c textures.h proj/source/
 
-          make -C proj
+          make -C proj clean
+          make -C proj all
 
-          echo "=== SEARCHING FOR OUTPUT FILES ==="
-          find proj -type f
+          echo "=== GENERATED NDS FILES ==="
+          find proj -type f -name "*.nds"
 
-          echo "=== ROOT FILES ==="
-          ls -la proj
+          test -f proj/rumble-forest-ds.nds
 
       - uses: actions/upload-artifact@v4
         with:
           name: rumble-forest-ds
-          path: proj/*.nds
+          path: proj/rumble-forest-ds.nds
           if-no-files-found: error

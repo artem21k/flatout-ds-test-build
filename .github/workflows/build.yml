@@ -30,16 +30,33 @@ jobs:
           rm -f proj/source/*
           cp main.c textures.h proj/source/
 
-          echo "=== BUILD ARM9 ELF ==="
+          echo "=== BUILD ARM9 ==="
           make -C proj TARGET=rumble-forest-ds clean
           make -C proj TARGET=rumble-forest-ds
 
-          echo "=== CHECK REQUIRED FILES ==="
-          test -f proj/rumble-forest-ds.elf
-          test -f "$DEVKITPRO/calico/bin/ds7_maine.elf"
-          test -f "$DEVKITPRO/calico/share/nds-icon.bmp"
+          ARM9_ELF="proj/rumble-forest-ds.elf"
 
-          echo "=== FIND NDSTOOL ==="
+          echo "=== LOCATE ARM7 ==="
+          ARM7_ELF=$(find "$DEVKITPRO" -type f -name "ds7_maine.elf" -print -quit)
+
+          if [ -z "$ARM7_ELF" ]; then
+            ARM7_ELF=$(find "$DEVKITPRO" -type f -path "*/libnds/default.elf" -print -quit)
+          fi
+
+          echo "=== LOCATE ICON ==="
+          ICON=$(find "$DEVKITPRO" -type f -name "nds-icon.bmp" -print -quit)
+
+          echo "ARM9: $ARM9_ELF"
+          echo "ARM7: ${ARM7_ELF:-NOT FOUND}"
+          echo "ICON: ${ICON:-NOT FOUND}"
+
+          test -s "$ARM9_ELF"
+          test -n "$ARM7_ELF"
+          test -s "$ARM7_ELF"
+          test -n "$ICON"
+          test -s "$ICON"
+
+          echo "=== LOCATE NDSTOOL ==="
           NDSTOOL=$(command -v ndstool || true)
 
           if [ -z "$NDSTOOL" ]; then
@@ -47,13 +64,12 @@ jobs:
           fi
 
           test -n "$NDSTOOL"
-          echo "Using: $NDSTOOL"
 
-          echo "=== CREATE NDS ROM ==="
+          echo "=== CREATE NDS ==="
           "$NDSTOOL" -c proj/rumble-forest-ds.nds \
-            -9 proj/rumble-forest-ds.elf \
-            -7 "$DEVKITPRO/calico/bin/ds7_maine.elf" \
-            -b "$DEVKITPRO/calico/share/nds-icon.bmp" \
+            -9 "$ARM9_ELF" \
+            -7 "$ARM7_ELF" \
+            -b "$ICON" \
             "RumbleForest;Homebrew;devkitPro"
 
           echo "=== VERIFY ROM ==="

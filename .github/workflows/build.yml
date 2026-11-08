@@ -22,7 +22,6 @@ jobs:
 
           T=$(find nds-examples/templates -type d -name arm9 | head -n1)
           test -n "$T"
-
           cp -r "$T" proj
 
           sed -i 's|^LIBS := -lnds9$|LIBS := -lnds9 -lm|' proj/Makefile
@@ -35,26 +34,74 @@ jobs:
           make -C proj TARGET=rumble-forest-ds
 
           ARM9_ELF="proj/rumble-forest-ds.elf"
+          test -s "$ARM9_ELF"
 
           echo "=== LOCATE ARM7 ==="
-          ARM7_ELF=$(find "$DEVKITPRO" -type f -name "ds7_maine.elf" -print -quit)
+          ARM7_ELF="$DEVKITPRO/calico/bin/ds7_maine.elf"
 
-          if [ -z "$ARM7_ELF" ]; then
-            ARM7_ELF=$(find "$DEVKITPRO" -type f -path "*/libnds/default.elf" -print -quit)
+          if [ ! -s "$ARM7_ELF" ]; then
+            ARM7_ELF="$DEVKITPRO/libnds/default.elf"
           fi
 
-          echo "=== LOCATE ICON ==="
-          ICON=$(find "$DEVKITPRO" -type f -name "nds-icon.bmp" -print -quit)
-
-          echo "ARM9: $ARM9_ELF"
-          echo "ARM7: ${ARM7_ELF:-NOT FOUND}"
-          echo "ICON: ${ICON:-NOT FOUND}"
-
-          test -s "$ARM9_ELF"
-          test -n "$ARM7_ELF"
           test -s "$ARM7_ELF"
-          test -n "$ICON"
-          test -s "$ICON"
+          echo "ARM7: $ARM7_ELF"
+
+          echo "=== CREATE 32x32 ICON ==="
+          python3 - <<'PY'
+          import struct
+
+          width = 32
+          height = 32
+
+          palette = [
+              (0, 0, 0), (0, 0, 180), (0, 100, 255),
+              (0, 180, 255), (0, 255, 0), (0, 180, 0),
+              (255, 255, 0), (255, 180, 0), (255, 0, 0),
+              (180, 0, 0), (255, 255, 255), (180, 180, 180),
+              (100, 100, 100), (60, 60, 60), (255, 0, 255),
+              (0, 255, 255)
+          ]
+
+          pixels = bytearray()
+
+          for y in range(height - 1, -1, -1):
+              row = bytearray()
+              for x in range(0, width, 2):
+                  def color(px, py):
+                      if 5 <= px < 27 and 5 <= py < 27:
+                          return 3 if (px + py) % 4 < 2 else 2
+                      return 1
+                  a = color(x, y)
+                  b = color(x + 1, y)
+                  row.append((a << 4) | b)
+              pixels.extend(row)
+
+          palette_data = b''.join(
+              struct.pack('<BBBB', b, g, r, 0)
+              for r, g, b in palette
+          )
+
+          offset = 14 + 40 + len(palette_data)
+          file_size = offset + len(pixels)
+
+          file_header = struct.pack(
+              '<2sIHHI', b'BM', file_size, 0, 0, offset
+          )
+
+          dib_header = struct.pack(
+              '<IiiHHIIiiII',
+              40, width, height, 1, 4, 0,
+              len(pixels), 2835, 2835, 16, 16
+          )
+
+          with open('proj/icon.bmp', 'wb') as f:
+              f.write(file_header)
+              f.write(dib_header)
+              f.write(palette_data)
+              f.write(pixels)
+          PY
+
+          test -s proj/icon.bmp
 
           echo "=== LOCATE NDSTOOL ==="
           NDSTOOL=$(command -v ndstool || true)
@@ -64,12 +111,13 @@ jobs:
           fi
 
           test -n "$NDSTOOL"
+          echo "NDSTOOL: $NDSTOOL"
 
-          echo "=== CREATE NDS ==="
+          echo "=== CREATE NDS ROM ==="
           "$NDSTOOL" -c proj/rumble-forest-ds.nds \
             -9 "$ARM9_ELF" \
             -7 "$ARM7_ELF" \
-            -b "$ICON" \
+            -b proj/icon.bmp \
             "RumbleForest;Homebrew;devkitPro"
 
           echo "=== VERIFY ROM ==="

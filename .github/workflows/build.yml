@@ -1,3 +1,4 @@
+
 name: Build NDS
 
 on:
@@ -21,20 +22,19 @@ jobs:
 
           cp -r "$T" proj
 
-          sed -i 's|^TARGET :=.*|TARGET := rumble-forest-ds|' proj/Makefile
           sed -i 's|^LIBS := -lnds9$|LIBS := -lnds9 -lm|' proj/Makefile
 
           rm -f proj/source/*
           cp main.c textures.h proj/source/
 
-          echo "=== MAKEFILE SETTINGS ==="
-          grep -E '^(TARGET|LIBS|BUILD) *[:?+]?=' proj/Makefile
+          echo "=== MAKEFILE ==="
+          grep -n 'TARGET\|OUTPUT\|LIBS' proj/Makefile
 
           echo "=== CLEAN ==="
-          make -C proj clean
+          make -C proj TARGET=rumble-forest-ds clean
 
           echo "=== BUILD ==="
-          make -C proj
+          make -C proj TARGET=rumble-forest-ds
 
           echo "=== GENERATED FILES ==="
           find proj -type f \( -name "*.nds" -o -name "*.elf" \)

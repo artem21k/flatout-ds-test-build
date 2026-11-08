@@ -15,6 +15,9 @@ jobs:
 
       - name: Build NDS ROM
         run: |
+          set -eu
+
+          echo "=== CLONE EXAMPLES ==="
           git clone --depth 1 https://github.com/devkitPro/nds-examples.git
 
           T=$(find nds-examples/templates -type d -name arm9 | head -n1)
@@ -24,24 +27,38 @@ jobs:
 
           sed -i 's|^LIBS := -lnds9$|LIBS := -lnds9 -lm|' proj/Makefile
 
-          sed -i 's|@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile|@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile $(OUTPUT).nds|' proj/Makefile
-
           rm -f proj/source/*
           cp main.c textures.h proj/source/
 
-          echo "=== VERIFY MAKEFILE ==="
-          grep -n 'OUTPUT.*nds\|LIBS :=' proj/Makefile
-
-          echo "=== CLEAN ==="
+          echo "=== BUILD ARM9 ELF ==="
           make -C proj TARGET=rumble-forest-ds clean
-
-          echo "=== BUILD ==="
           make -C proj TARGET=rumble-forest-ds
 
-          echo "=== GENERATED FILES ==="
-          find proj -type f \( -name "*.nds" -o -name "*.elf" \)
+          echo "=== CHECK REQUIRED FILES ==="
+          test -f proj/rumble-forest-ds.elf
+          test -f "$DEVKITPRO/calico/bin/ds7_maine.elf"
+          test -f "$DEVKITPRO/calico/share/nds-icon.bmp"
 
-          test -f proj/rumble-forest-ds.nds
+          echo "=== FIND NDSTOOL ==="
+          NDSTOOL=$(command -v ndstool || true)
+
+          if [ -z "$NDSTOOL" ]; then
+            NDSTOOL=$(find "$DEVKITPRO" -type f -name ndstool -perm -111 -print -quit)
+          fi
+
+          test -n "$NDSTOOL"
+          echo "Using: $NDSTOOL"
+
+          echo "=== CREATE NDS ROM ==="
+          "$NDSTOOL" -c proj/rumble-forest-ds.nds \
+            -9 proj/rumble-forest-ds.elf \
+            -7 "$DEVKITPRO/calico/bin/ds7_maine.elf" \
+            -b "$DEVKITPRO/calico/share/nds-icon.bmp" \
+            "RumbleForest;Homebrew;devkitPro"
+
+          echo "=== VERIFY ROM ==="
+          ls -lh proj/rumble-forest-ds.nds
+          test -s proj/rumble-forest-ds.nds
 
       - name: Upload NDS artifact
         uses: actions/upload-artifact@v4

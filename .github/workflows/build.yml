@@ -1,7 +1,7 @@
-
 name: Build NDS
 
-on: workflow_dispatch
+on:
+  workflow_dispatch:
 
 jobs:
   build:
@@ -9,7 +9,8 @@ jobs:
     container: devkitpro/devkitarm:20241104
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Build NDS ROM
         run: |
@@ -20,21 +21,28 @@ jobs:
 
           cp -r "$T" proj
 
-          sed -i 's/^TARGET :=.*/TARGET := rumble-forest-ds/' proj/Makefile
-          sed -i 's/^LIBS := -lnds9$/LIBS := -lnds9 -lm/' proj/Makefile
+          sed -i 's|^TARGET :=.*|TARGET := rumble-forest-ds|' proj/Makefile
+          sed -i 's|^LIBS := -lnds9$|LIBS := -lnds9 -lm|' proj/Makefile
 
           rm -f proj/source/*
           cp main.c textures.h proj/source/
 
-          make -C proj clean
-          make -C proj all
+          echo "=== MAKEFILE SETTINGS ==="
+          grep -E '^(TARGET|LIBS|BUILD) *[:?+]?=' proj/Makefile
 
-          echo "=== GENERATED NDS FILES ==="
-          find proj -type f -name "*.nds"
+          echo "=== CLEAN ==="
+          make -C proj clean
+
+          echo "=== BUILD ==="
+          make -C proj
+
+          echo "=== GENERATED FILES ==="
+          find proj -type f \( -name "*.nds" -o -name "*.elf" \)
 
           test -f proj/rumble-forest-ds.nds
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload NDS artifact
+        uses: actions/upload-artifact@v4
         with:
           name: rumble-forest-ds
           path: proj/rumble-forest-ds.nds

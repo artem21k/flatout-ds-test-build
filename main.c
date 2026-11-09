@@ -74,7 +74,7 @@ static float dbgCam[6];
 #define AUTOPILOT 0
 #endif
 
-enum { ST_MENU, ST_COUNT, ST_PLAY, ST_END };
+enum { ST_SPLASH, ST_MENU, ST_COUNT, ST_PLAY, ST_END };
 enum { GM_DERBY, GM_RACE };
 enum { PT_SMOKE, PT_SPARK, PT_DUST, PT_FLAME, PT_BLACK };
 enum { OB_TREE=0, OB_PILLAR, OB_BARREL, OB_BLOCK, OB_ROCK, OB_TIRES };
@@ -173,6 +173,11 @@ static int   menuScr, mainSel, modeSel, mapSel, carSel=4, optSel, lastMap=2;
 static int   lapsN=3, sndOn=1;
 static float trackTotal;
 enum { SC_MAIN, SC_MAPS, SC_CAR, SC_OPT };
+
+static int splashTimer;
+static int splashTexId;
+static u16 splashTopBuf[256*256] __attribute__((aligned(4)));
+static u16 splashBotBuf[256*192] __attribute__((aligned(4)));
 
 static float roadX[MAXPTS], roadZ[MAXPTS], nrmX[MAXPTS], nrmZ[MAXPTS];
 static float trkH[MAXPTS], limitSp[MAXPTS], seg2[MAXPTS];
@@ -739,8 +744,6 @@ static void updatePlay(u32 held,u32 down)
         }
     }
 }
-
-/* ===== PART 2 (rendering, HUD, main loop) is appended below ===== */
 
 /* ============================== TEXTURES =================================== */
 static int texId[TX_COUNT], curTex=-1;
@@ -1403,6 +1406,78 @@ static void htri(int x,int y,int dir,u16 c)      /* small triangle, dir -1 = poi
     }
 }
 
+/* Малювання товстих ліній для логотипів */
+static void hdrawLineThick(int x0, int y0, int x1, int y1, u16 color, int thickness) {
+    int dx = iabs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+    int dy = -iabs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+    int err = dx + dy, e2;
+    while (1) {
+        hdisc(x0, y0, thickness, color);
+        if (x0 == x1 && y0 == y1) break;
+        e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x0 += sx; }
+        if (e2 <= dx) { err += dx; y0 += sy; }
+    }
+}
+
+static void initSplashLogos(void) {
+    // ==========================================
+    // ВЕРХНІЙ ЕКРАН: CLAUDE ENTERTAINMENT
+    // ==========================================
+    hrect(0, 0, 256, 256, 0xFFFF); // Білий фон (заповнюємо з запасом для текстури)
+    
+    // Жовте "сонце"
+    int cx = 65, cy = 90;
+    for (int i = 0; i < 12; i++) {
+        float ang = i * (3.14159265f / 6.0f);
+        int x1 = cx + (int)(cosf(ang) * 45.0f);
+        int y1 = cy + (int)(sinf(ang) * 45.0f);
+        hdrawLineThick(cx, cy, x1, y1, C15(255, 170, 0), 3);
+    }
+    hdisc(cx, cy, 8, C15(255, 170, 0));
+    
+    // Текст CLAUDE
+    htextEx(32, 60, "CLAUDE", 0x0000, 4, 0); // Чорний, масштаб 4
+    hline(32, 105, 224, 105, 0x0000);
+    hline(32, 106, 224, 106, 0x0000);
+    htextEx(28, 112, "E N T E R T A I N M E N T", 0x0000, 1, 0);
+
+    // Копіюємо намальований верх у буфер для заставки
+    memcpy(splashTopBuf, hudBuf, sizeof(splashTopBuf));
+
+    // ==========================================
+    // НИЖНІЙ ЕКРАН: ARTem21k
+    // ==========================================
+    hrect(0, 0, 256, 192, 0x0000); // Чорний фон
+    
+    // Червоний каркас куба
+    cx = 128; cy = 75;
+    int r = 40;
+    int v[7][2] = {
+        {cx, cy - r}, {cx + r, cy}, {cx, cy + r}, {cx - r, cy},
+        {cx - r/2, cy - r/2}, {cx + r/2, cy - r/2}, {cx + r/2, cy + r/2}
+    };
+    u16 red = C15(255, 0, 0);
+    // Зовнішній ромб
+    hdrawLineThick(v[0][0], v[0][1], v[1][0], v[1][1], red, 1);
+    hdrawLineThick(v[1][0], v[1][1], v[2][0], v[2][1], red, 1);
+    hdrawLineThick(v[2][0], v[2][1], v[3][0], v[3][1], red, 1);
+    hdrawLineThick(v[3][0], v[3][1], v[0][0], v[0][1], red, 1);
+    // Внутрішні лінії
+    hdrawLineThick(v[4][0], v[4][1], v[5][0], v[5][1], red, 1);
+    hdrawLineThick(v[5][0], v[5][1], v[6][0], v[6][1], red, 1);
+    hdrawLineThick(v[6][0], v[6][1], v[2][0], v[2][1], red, 1);
+    hdrawLineThick(v[4][0], v[4][1], v[0][0], v[0][1], red, 1);
+    hdrawLineThick(v[5][0], v[5][1], v[1][0], v[1][1], red, 1);
+
+    // Текст ARTem21k з червоним свіченням
+    htextEx(32, 142, "ARTem21k", C15(150, 0, 0), 3, 1); // Тінь/свічення
+    htextEx(31, 140, "ARTem21k", 0xFFFF, 3, 1);         // Білий текст
+    
+    // Копіюємо намальований низ у буфер для заставки
+    memcpy(splashBotBuf, hudBuf, sizeof(splashBotBuf));
+}
+
 /* ---- Flatout-style furniture ---- */
 static void hHeader(const char *t)
 {
@@ -1759,6 +1834,35 @@ static void hudUpdate(void)         /* everything in one go (menus, screen chang
 }
 static int hudStage;               /* 0 = idle, 1 = background drawn, gauges + present next frame */
 
+static void renderSplash(void) {
+    // Відображення верхнього екрану (3D площина з текстурою)
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrtho(0.0f, 256.0f, 192.0f, 0.0f, -1.0f, 1.0f);
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+    
+    glDisable(GL_DEPTH_TEST);
+    glPolyFmt(POLY_ALPHA(31) | POLY_CULL_NONE | POLY_ID(0));
+    
+    glBindTexture(0, splashTexId);
+    curTex = splashTexId;
+    
+    glBegin(QUADS_MODE);
+    glColor3b(255, 255, 255);
+    tv(0, 0, 0, 0, 0); 
+    tv(4096, 0, 256*4096, 0, 0);
+    tv(4096, 192*16, 256*4096, 192*4096, 0); 
+    tv(0, 192*16, 0, 192*4096, 0);
+    glEnd();
+    
+    glEnable(GL_DEPTH_TEST);
+    
+    // Відображення нижнього екрану
+    memcpy(hudBuf, splashBotBuf, sizeof(hudBuf));
+    hudPresent();
+}
+
 /* ============================== MENU LOGIC ================================= */
 static int previewMap(void)
 {
@@ -1840,6 +1944,16 @@ static void gameFrame(u32 held,u32 down,int touched,int tx,int ty)
 {
     frameNo++;
     sndTick();
+    
+    if (state == ST_SPLASH) {
+        if (--splashTimer <= 0 || (down & (KEY_A | KEY_START | KEY_TOUCH))) {
+            goMenu();
+            return; // Наступного кадру вже буде меню
+        }
+        renderSplash();
+        return; // Пропускаємо звичайний рендер гри
+    }
+
     if(state==ST_MENU){
         menuInput(down,touched,tx,ty);
         if(state==ST_MENU){
@@ -1895,8 +2009,18 @@ int main(void)
 
     loadTextures();
     initMenuData();
+    
+    // --- ІНІЦІАЛІЗАЦІЯ ЗАСТАВКИ ---
+    initSplashLogos(); // Малюємо логотипи в пам'ять
+    glGenTextures(1, &splashTexId);
+    glBindTexture(0, splashTexId);
+    glTexImage2D(0, 0, GL_RGBA, 8, 8, 0, TEXGEN_TEXCOORD | GL_TEXTURE_WRAP_S | GL_TEXTURE_WRAP_T, splashTopBuf); // 8 = 256x256
+    
     sndInit();
-    goMenu();
+    
+    state = ST_SPLASH; // Запускаємо зі стану заставки
+    splashTimer = 180; // 3 секунди (60fps * 3)
+    // ------------------------------
 
     while(1){
         u32 held, down;

@@ -75,7 +75,9 @@ static float dbgCam[6];
 #define AUTOPILOT 0
 #endif
 
-enum { ST_MENU, ST_COUNT, ST_PLAY, ST_END };
+enum { ST_SPLASH, ST_MENU, ST_COUNT, ST_PLAY, ST_END };
+static int splashT = 300; /* 300 кадров = ровно 5 секунд при 60 FPS */
+
 enum { GM_DERBY, GM_RACE };
 enum { PT_SMOKE, PT_SPARK, PT_DUST, PT_FLAME, PT_BLACK };
 enum { OB_TREE=0, OB_PILLAR, OB_BARREL, OB_BLOCK, OB_ROCK, OB_TIRES };
@@ -1118,8 +1120,134 @@ static void drawGarage(void)
 
 static int lodArr[MAXC];
 
-static void render(void)
+/* ======================= ЗАСТАВКА (SPLASH SCREENS) ========================= */
+/* Нижний экран: логотип ARTem21k (черный фон, красный ромб, белый текст) */
+static void hudSplash(void)
 {
+    int x, y, i, cx = 128, cy = 68, r = 34;
+    int f = 255;
+    if (splashT > 270) f = (300 - splashT) * 255 / 30;      /* плавное появление (0.5 сек) */
+    else if (splashT < 30) f = splashT * 255 / 30;          /* плавное затухание (0.5 сек) */
+    if (f < 0) f = 0; if (f > 255) f = 255;
+
+    u16 cRed = C15(245 * f / 255, 15 * f / 255, 15 * f / 255);
+    u16 cDarkRed = C15(110 * f / 255, 5 * f / 255, 5 * f / 255);
+    u16 cWhite = C15(245 * f / 255, 245 * f / 255, 245 * f / 255);
+
+    for (y = 0; y < HUDH; y++)
+        for (x = 0; x < HUDW; x++)
+            hudBuf[y * HUDW + x] = C15(0, 0, 0);
+
+    /* Внешний контур ромба с легким свечением */
+    for (i = -2; i <= 2; i++) {
+        u16 col = (i == 0 || i == -1 || i == 1) ? cRed : cDarkRed;
+        hline(cx, cy - r + i, cx + r, cy + i, col);
+        hline(cx + r, cy + i, cx, cy + r + i, col);
+        hline(cx, cy + r + i, cx - r, cy + i, col);
+        hline(cx - r, cy + i, cx, cy - r + i, col);
+    }
+    /* Внутренние геометрические линии ромба как на логотипе */
+    for (i = -1; i <= 1; i++) {
+        hline(cx - 17, cy - 17 + i, cx + 17, cy - 17 + i, cRed); /* верхняя перекладина */
+        hline(cx - 24, cy - 10 + i, cx + 10, cy - 10 + i, cRed); /* средняя перекладина */
+        hline(cx - 6 + i, cy - 28, cx + 8 + i, cy - 10, cRed);   /* косая линия слева */
+        hline(cx + 8 + i, cy - 10, cx + 16 + i, cy - 18, cRed);  /* галочка справа */
+        hline(cx + 12, cy - 14 + i, cx - 12, cy + 10 + i, cRed); /* внутренняя диагональ */
+        hline(cx - 12, cy + 10 + i, cx + 5, cy + 27 + i, cRed);  /* нижний уступ */
+    }
+
+    /* Надпись ARTem21k (2x масштаб, по центру) */
+    htextEx(128 - htextW("ARTem21k", 2) / 2, 128, "ARTem21k", cWhite, 2, 0);
+}
+
+/* Вспомогательный 3D-прямоугольник без текстуры (использует белый уголок атласа) */
+static void splashQuad(float x0, float y0, float x1, float y1, int r, int g, int b)
+{
+    glColor3b(r, g, b);
+    tv(6, 6, cl16(x0), cl16(y0), 0);
+    tv(6, 6, cl16(x1), cl16(y0), 0);
+    tv(6, 6, cl16(x1), cl16(y1), 0);
+    tv(6, 6, cl16(x0), cl16(y1), 0);
+}
+
+/* Рисует букву из системного шрифта 8x8 в 3D на верхнем экране */
+static void splashChar3D(char ch, float ox, float oy, float sz, int r, int g, int b)
+{
+    const unsigned char *glyph = &font8x8[((unsigned char)ch - 32) * 8];
+    int row, bit;
+    for (row = 0; row < 8; row++) {
+        for (bit = 0; bit < 8; bit++) {
+            if (glyph[row] & (0x80 >> bit)) {
+                float px = ox + bit * sz;
+                float py = oy - row * sz;
+                splashQuad(px, py - sz, px + sz * 0.95f, py, r, g, b);
+            }
+        }
+    }
+}
+
+/* Верхний экран: логотип CLAUDE ENTERTAINMENT на белом фоне */
+static void renderSplashTop(void)
+{
+    int k, f = 255;
+    const char *w1 = "CLAUDE";
+    const char *w2 = "ENTERTAINMENT";
+    if (splashT > 270) f = (300 - splashT) * 255 / 30;
+    else if (splashT < 30) f = splashT * 255 / 30;
+    if (f < 0) f = 0; if (f > 255) f = 255;
+
+    /* Белый фон с плавным появлением из черного */
+    glClearColor(31 * f / 255, 31 * f / 255, 31 * f / 255, 31);
+
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluPerspective(50.0f, 256.0f / 192.0f, 0.1f, 50.0f);
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+    gluLookAt(0.0f, 0.0f, 6.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
+
+    useTex(TX_WHITE);
+    glPolyFmt(POLY_ALPHA(31) | POLY_CULL_NONE);
+    glBegin(QUADS_MODE);
+
+    /* Оранжевая звезда-солнышко слева (11 лучей) */
+    {
+        float sx = -2.25f, sy = 0.05f;
+        int cr = 255 - (255 - 242) * f / 255;
+        int cg = 255 - (255 - 168) * f / 255;
+        int cb = 255 - (255 - 30) * f / 255;
+        glColor3b(cr, cg, cb);
+        for (k = 0; k < 11; k++) {
+            float ang = (float)k * TWOPI_F / 11.0f + 0.2f;
+            float len = (k % 2 == 0) ? 0.68f : 0.56f;
+            float dx = cosf(ang), dy = sinf(ang);
+            float nx = -dy * 0.045f, ny = dx * 0.045f;
+            tv(6, 6, cl16(sx - nx), cl16(sy - ny), 0);
+            tv(6, 6, cl16(sx + nx), cl16(sy + ny), 0);
+            tv(6, 6, cl16(sx + dx * len + nx * 0.7f), cl16(sy + dy * len + ny * 0.7f), 0);
+            tv(6, 6, cl16(sx + dx * len - nx * 0.7f), cl16(sy + dy * len - ny * 0.7f), 0);
+        }
+    }
+
+    /* Черный текст и разделительная линия */
+    {
+        int bk = 255 - f; /* плавный переход от белого к черному */
+        for (k = 0; w1[k]; k++)
+            splashChar3D(w1[k], -1.35f + k * 0.66f, 0.55f, 0.08f, bk, bk, bk);
+
+        /* Горизонтальная линия под словом CLAUDE */
+        splashQuad(-1.35f, -0.14f, 2.55f, -0.10f, bk, bk, bk);
+
+        /* Надпись ENTERTAINMENT */
+        for (k = 0; w2[k]; k++)
+            splashChar3D(w2[k], -1.35f + k * 0.305f, -0.24f, 0.032f, bk, bk, bk);
+    }
+
+    glEnd();
+}
+
+static void render(void)
+{if (state == ST_SPLASH) { renderSplashTop(); return; }
     float ex,ey,ez,lx,ly,lz,fdx,fdz,fl;
     int k;
 
@@ -1762,6 +1890,20 @@ static void gameFrame(u32 held,u32 down,int touched,int tx,int ty)
 {
     frameNo++;
     sndTick();
+    if (state == ST_SPLASH) {
+    	splashT--;
+    	hudSplash();
+    	hudPresent();
+    	render();
+    	/* Через 5 секунд (или при нажатии A / Start / тачскрина) переходим в меню */
+    	if (splashT <= 0 || (down & (KEY_A | KEY_START)) || touched) {
+        	glClearColor(9, 15, 25, 31); /* возвращаем цвет неба */
+        	goMenu();
+        	hudUpdate();
+    	}
+    	return;
+     }
+
     if(state==ST_MENU){
         menuInput(down,touched,tx,ty);
         if(state==ST_MENU){
@@ -1818,7 +1960,9 @@ int main(void)
     loadTextures();
     initMenuData();
     sndInit();
-    goMenu();
+    state = ST_SPLASH;
+    splashT = 300;
+
 
     while(1){
         u32 held, down;

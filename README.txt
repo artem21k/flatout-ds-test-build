@@ -1,3 +1,66 @@
+RUMBLE FOREST DS - a game for the ORIGINAL Nintendo DS (not DSi) in the spirit of Flatout 2
+=  In GARAGE - car selection with scales: TOP SPEED, ACCELERATION,
+HANDLING, STRENGTH, WEIGHT, NITRO, class (DERBY/RACE) and drive.
+In OPTIONS - AI level, number of laps, sound.
+CARS (8, 4 classes): DERBY - ROAMER (rusty pickup), MALICE (black coupe #17) |
+RACE - NEVADA (blue pickup #23, 4WD), INSETTA (white sedan with wing) |
+STREET - BULLET GT (black coupe with flames), CANYON (blue pickup with stripes) |
+BONUS - TRUCK (black truck tractor), FLATMOBILE (silver wedge).
+ Low-poly models: the body is a "frame of sections" (7-8 sections with their own
+height/width), the wheels are octagonal prisms flush with the body, all
+irregularities (doors, windows, stripes, rust, grilles, numbers, flames) are drawn
+in a 128x64 texture for each car. Faraway cars are drawn in a simplified way.
+The characteristics really affect the ride, and each car has its own collision radius.
+The models are my interpretations "in the spirit" of the reference, not files from the game.
+MAPS (4): DERBY STADIUM / JUNKYARD | RALLY FOREST / CANYON (desert)
+The maps are author's, "in the spirit" of Flatout 2 (real maps cannot be transferred to the DS).
+
+ CONTROLS
+Menu: D-pad - select, A - forward, B - back, START - quick start,
+touching icons/cards/carousel also works
+Game: Left/Right steering wheel A or Up gas
+B or Down brake/back Y or R nitro (charged from impacts)
+L handbrake (drift) X turn on the track (rally)
+START or touch "MENU" - exit menu
+
+HOW TO ASSEMBLE .nds
+Option A (PC): install devkitPro (devkitARM + libnds), take the ARM9 template from
+examples/nds/templates, put source/main.c, source/textures.h and source/cars.h in its
+source/, in the devkitPro terminal run make.
+ Option B (phone, GitHub): create a repository, upload main.c,
+textures.h and cars.h (to the root), and put the github_workflow/build.yml file (your working script + cars.h) as
+.github/workflows/build.yml. Next, the Actions tab -> Build NDS -> Run workflow;
+the finished .nds will be in Artifacts.
+
+If the linker complains about sinf/cosf/atan2f: in the Makefile LIBS := -lnds9 -lm
+
+IF A COMPILATION ERROR OCCURS
+At the beginning of main.c there are two switches in the comment:
+#define ENABLE_SOUND 0 - removes all sound
+#define USE_RAW_MATRIX_REGS 1 - another way to call translate/scale
+Uncomment and compile again. If it doesn't help - send the error text.
+
+ WHAT IS TESTED AND WHAT IS NOT
+Tested on PC (with stubs instead of libnds and own rasterizer):
+- all 4 maps with different cars are passed from start to finish without NaN and crashes;
+- menu: keys, touch, all screens, car selection, options;
+- DS limits: max. ~1900 vertices and ~480 polygons per frame (allowed ~6000/2000),
+vertex coordinates in the DS range, textures ~155 KB with 256 KB VRAM;
+- picture: preview/ folder - frames from my rasterizer (approximation, not emulator).
+NOT tested: assembly with real devkitARM/libnds and running in emulator or on
+hardware. I estimated the speed by eye (should pull 60 fps), but I did not measure it.
+
+ MEMORY (original DS: 4 MB RAM, 656 KB VRAM)
+Textures ~235 KB out of 256 KB (VRAM banks A+B), subscreen 96 KB (bank C).
+RAM: ~0.6 MB out of 4 MB (code, texture data, two 96 KB lower screen buffers).
+Geometry per frame: ~4200 vertices / ~1060 polygons (limit ~6144 / 2048).
+
+TEXTURES
+tools/gen_textures.py + tools/carspec.py (Python + Pillow, numpy, scipy) generate
+source/textures.h and source/cars.h (model data). Car shapes - in carspec.py:
+all textures are procedural (grass, soil, sand, concrete, road, pine, cactus,
+clean and rusty body, sky...) and interface font.
+
 RUMBLE FOREST DS  -  гра для ОРИГІНАЛЬНОЇ Nintendo DS (не DSi) у дусі Flatout 2
 ==============================================================================
 

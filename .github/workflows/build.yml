@@ -21,7 +21,8 @@ jobs:
           set -eu
 
           echo "=== CLONE EXAMPLES ==="
-          git clone --depth 1 https://github.com
+          REPO="https://github.com"
+          git clone --depth 1 "$REPO/devkitPro/nds-examples.git"
 
           T=$(find nds-examples/templates -type d -name arm9 | head -n1)
           test -n "$T"

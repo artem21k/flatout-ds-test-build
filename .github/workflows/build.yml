@@ -1,4 +1,3 @@
-
 name: Build NDS
 
 on:
@@ -27,7 +26,7 @@ jobs:
           sed -i 's|^LIBS := -lnds9$|LIBS := -lnds9 -lm|' proj/Makefile
 
           rm -f proj/source/*
-          cp main.c textures.h proj/source/
+          cp main.c textures.h cars.h proj/source/
 
           echo "=== BUILD ARM9 ==="
           make -C proj TARGET=rumble-forest-ds clean

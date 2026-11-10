@@ -2,6 +2,11 @@ name: Build NDS
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '**.c'
+      - '**.h'
+      - '**.py'
 
 jobs:
   build:
@@ -11,6 +16,18 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Auto-generate cars & textures (if tools exist)
+        run: |
+          set -eu
+          if [ -f "tools/gen_textures.py" ] && [ -f "tools/carspec.py" ]; then
+            echo "=== GENERATING CARS & TEXTURES ==="
+            mkdir -p source
+            pip3 install --quiet numpy pillow scipy || python3 -m pip install --quiet numpy pillow scipy
+            python3 tools/gen_textures.py
+          else
+            echo "No tools/gen_textures.py found, using existing .h files."
+          fi
 
       - name: Build NDS ROM
         run: |
@@ -26,7 +43,16 @@ jobs:
           sed -i 's|^LIBS := -lnds9$|LIBS := -lnds9 -lm|' proj/Makefile
 
           rm -f proj/source/*
-          cp main.c textures.h cars.h proj/source/
+          for f in main.c textures.h cars.h; do
+            if [ -f "source/$f" ]; then
+              cp "source/$f" proj/source/
+            elif [ -f "$f" ]; then
+              cp "$f" proj/source/
+            else
+              echo "ERROR: File $f not found in root or source/!"
+              exit 1
+            fi
+          done
 
           echo "=== BUILD ARM9 ==="
           make -C proj TARGET=rumble-forest-ds clean
@@ -37,78 +63,38 @@ jobs:
 
           echo "=== LOCATE ARM7 ==="
           ARM7_ELF="$DEVKITPRO/calico/bin/ds7_maine.elf"
-
           if [ ! -s "$ARM7_ELF" ]; then
             ARM7_ELF="$DEVKITPRO/libnds/default.elf"
           fi
-
           test -s "$ARM7_ELF"
           echo "ARM7: $ARM7_ELF"
 
           echo "=== CREATE 32x32 ICON ==="
-          python3 - <<'PY'
-          import struct
-
-          width = 32
-          height = 32
-
-          palette = [
-              (0, 0, 0), (0, 0, 180), (0, 100, 255),
-              (0, 180, 255), (0, 255, 0), (0, 180, 0),
-              (255, 255, 0), (255, 180, 0), (255, 0, 0),
-              (180, 0, 0), (255, 255, 255), (180, 180, 180),
-              (100, 100, 100), (60, 60, 60), (255, 0, 255),
-              (0, 255, 255)
-          ]
-
-          pixels = bytearray()
-
-          for y in range(height - 1, -1, -1):
-              row = bytearray()
-              for x in range(0, width, 2):
-                  def color(px, py):
-                      if 5 <= px < 27 and 5 <= py < 27:
-                          return 3 if (px + py) % 4 < 2 else 2
-                      return 1
-                  a = color(x, y)
-                  b = color(x + 1, y)
-                  row.append((a << 4) | b)
-              pixels.extend(row)
-
-          palette_data = b''.join(
-              struct.pack('<BBBB', b, g, r, 0)
-              for r, g, b in palette
-          )
-
-          offset = 14 + 40 + len(palette_data)
-          file_size = offset + len(pixels)
-
-          file_header = struct.pack(
-              '<2sIHHI', b'BM', file_size, 0, 0, offset
-          )
-
-          dib_header = struct.pack(
-              '<IiiHHIIiiII',
-              40, width, height, 1, 4, 0,
-              len(pixels), 2835, 2835, 16, 16
-          )
-
-          with open('proj/icon.bmp', 'wb') as f:
-              f.write(file_header)
-              f.write(dib_header)
-              f.write(palette_data)
-              f.write(pixels)
-          PY
-
+          python3 -c '
+import struct
+width, height = 32, 32
+palette = [
+    (0,0,0), (0,0,180), (0,100,255), (0,180,255),
+    (0,255,0), (0,180,0), (255,255,0), (255,180,0),
+    (255,0,0), (180,0,0), (255,255,255), (180,180,180),
+    (100,100,100), (60,60,60), (255,0,255), (0,255,255)
+]
+pixels = bytearray()
+for y in range(height - 1, -1, -1):
+    for x in range(0, width, 2):
+        c = lambda px, py: (3 if (px + py) % 4 < 2 else 2) if (5 <= px < 27 and 5 <= py < 27) else 1
+        pixels.append((c(x, y) << 4) | c(x + 1, y))
+pal_data = b"".join(struct.pack("<BBBB", b, g, r, 0) for r, g, b in palette)
+offset = 14 + 40 + len(pal_data)
+fh = struct.pack("<2sIHHI", b"BM", offset + len(pixels), 0, 0, offset)
+dh = struct.pack("<IiiHHIIiiII", 40, width, height, 1, 4, 0, len(pixels), 2835, 2835, 16, 16)
+with open("proj/icon.bmp", "wb") as f:
+    f.write(fh + dh + pal_data + pixels)
+'
           test -s proj/icon.bmp
 
           echo "=== LOCATE NDSTOOL ==="
-          NDSTOOL=$(command -v ndstool || true)
-
-          if [ -z "$NDSTOOL" ]; then
-            NDSTOOL=$(find "$DEVKITPRO" -type f -name ndstool -perm -111 -print -quit)
-          fi
-
+          NDSTOOL=$(command -v ndstool || find "$DEVKITPRO" -type f -name ndstool -perm -111 -print -quit)
           test -n "$NDSTOOL"
           echo "NDSTOOL: $NDSTOOL"
 

@@ -1122,43 +1122,7 @@ static int lodArr[MAXC];
 
 /* ======================= ЗАСТАВКА (SPLASH SCREENS) ========================= */
 /* Нижний экран: логотип ARTem21k (черный фон, красный ромб, белый текст) */
-static void hudSplash(void)
-{
-    int x, y, i, cx = 128, cy = 68, r = 34;
-    int f = 255;
-    if (splashT > 270) f = (300 - splashT) * 255 / 30;      /* плавное появление (0.5 сек) */
-    else if (splashT < 30) f = splashT * 255 / 30;          /* плавное затухание (0.5 сек) */
-    if (f < 0) f = 0; if (f > 255) f = 255;
 
-    u16 cRed = C15(245 * f / 255, 15 * f / 255, 15 * f / 255);
-    u16 cDarkRed = C15(110 * f / 255, 5 * f / 255, 5 * f / 255);
-    u16 cWhite = C15(245 * f / 255, 245 * f / 255, 245 * f / 255);
-
-    for (y = 0; y < HUDH; y++)
-        for (x = 0; x < HUDW; x++)
-            hudBuf[y * HUDW + x] = C15(0, 0, 0);
-
-    /* Внешний контур ромба с легким свечением */
-    for (i = -2; i <= 2; i++) {
-        u16 col = (i == 0 || i == -1 || i == 1) ? cRed : cDarkRed;
-        hline(cx, cy - r + i, cx + r, cy + i, col);
-        hline(cx + r, cy + i, cx, cy + r + i, col);
-        hline(cx, cy + r + i, cx - r, cy + i, col);
-        hline(cx - r, cy + i, cx, cy - r + i, col);
-    }
-    /* Внутренние геометрические линии ромба как на логотипе */
-    for (i = -1; i <= 1; i++) {
-        hline(cx - 17, cy - 17 + i, cx + 17, cy - 17 + i, cRed); /* верхняя перекладина */
-        hline(cx - 24, cy - 10 + i, cx + 10, cy - 10 + i, cRed); /* средняя перекладина */
-        hline(cx - 6 + i, cy - 28, cx + 8 + i, cy - 10, cRed);   /* косая линия слева */
-        hline(cx + 8 + i, cy - 10, cx + 16 + i, cy - 18, cRed);  /* галочка справа */
-        hline(cx + 12, cy - 14 + i, cx - 12, cy + 10 + i, cRed); /* внутренняя диагональ */
-        hline(cx - 12, cy + 10 + i, cx + 5, cy + 27 + i, cRed);  /* нижний уступ */
-    }
-
-    /* Надпись ARTem21k (2x масштаб, по центру) */
-    htextEx(128 - htextW("ARTem21k", 2) / 2, 128, "ARTem21k", cWhite, 2, 0);
-}
 
 /* Вспомогательный 3D-прямоугольник без текстуры (использует белый уголок атласа) */
 static void splashQuad(float x0, float y0, float x1, float y1, int r, int g, int b)
@@ -1453,7 +1417,43 @@ static void htri(int x,int y,int dir,u16 c)      /* small triangle, dir -1 = poi
         else      hrect(x+i,y-(4-i),1,2*(4-i)+1,c);
     }
 }
+static void hudSplash(void)
+{
+    int x, y, i, cx = 128, cy = 68, r = 34;
+    int f = 255;
+    if (splashT > 270) f = (300 - splashT) * 255 / 30;      /* плавное появление (0.5 сек) */
+    else if (splashT < 30) f = splashT * 255 / 30;          /* плавное затухание (0.5 сек) */
+    if (f < 0) f = 0; if (f > 255) f = 255;
 
+    u16 cRed = C15(245 * f / 255, 15 * f / 255, 15 * f / 255);
+    u16 cDarkRed = C15(110 * f / 255, 5 * f / 255, 5 * f / 255);
+    u16 cWhite = C15(245 * f / 255, 245 * f / 255, 245 * f / 255);
+
+    for (y = 0; y < HUDH; y++)
+        for (x = 0; x < HUDW; x++)
+            hudBuf[y * HUDW + x] = C15(0, 0, 0);
+
+    /* Внешний контур ромба с легким свечением */
+    for (i = -2; i <= 2; i++) {
+        u16 col = (i == 0 || i == -1 || i == 1) ? cRed : cDarkRed;
+        hline(cx, cy - r + i, cx + r, cy + i, col);
+        hline(cx + r, cy + i, cx, cy + r + i, col);
+        hline(cx, cy + r + i, cx - r, cy + i, col);
+        hline(cx - r, cy + i, cx, cy - r + i, col);
+    }
+    /* Внутренние геометрические линии ромба как на логотипе */
+    for (i = -1; i <= 1; i++) {
+        hline(cx - 17, cy - 17 + i, cx + 17, cy - 17 + i, cRed); /* верхняя перекладина */
+        hline(cx - 24, cy - 10 + i, cx + 10, cy - 10 + i, cRed); /* средняя перекладина */
+        hline(cx - 6 + i, cy - 28, cx + 8 + i, cy - 10, cRed);   /* косая линия слева */
+        hline(cx + 8 + i, cy - 10, cx + 16 + i, cy - 18, cRed);  /* галочка справа */
+        hline(cx + 12, cy - 14 + i, cx - 12, cy + 10 + i, cRed); /* внутренняя диагональ */
+        hline(cx - 12, cy + 10 + i, cx + 5, cy + 27 + i, cRed);  /* нижний уступ */
+    }
+
+    /* Надпись ARTem21k (2x масштаб, по центру) */
+    htextEx(128 - htextW("ARTem21k", 2) / 2, 128, "ARTem21k", cWhite, 2, 0);
+}
 /* ---- Flatout-style furniture ---- */
 static void hHeader(const char *t)
 {

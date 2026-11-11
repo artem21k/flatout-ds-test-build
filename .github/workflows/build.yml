@@ -6,7 +6,6 @@ on:
     paths:
       - '**.c'
       - '**.h'
-      - 'nitrofiles/**'
 
 jobs:
   build:
@@ -29,11 +28,10 @@ jobs:
           test -n "$T"
           cp -r "$T" proj
 
-          # Підключаємо -lfilesystem, -lfat (потрібна для nitroFSInit) та -lm
-          sed -i 's|-lnds9|-lfilesystem -lfat -lnds9 -lm|' proj/Makefile
+          sed -i 's|^LIBS := -lnds9$|LIBS := -lfilesystem -lfat -lnds9 -lm|' proj/Makefile
 
           rm -f proj/source/*
-          for f in main.c textures.h cars.h sounds.h; do
+          for f in main.c textures.h cars.h sounds.h images.h; do
             if [ -f "source/$f" ]; then
               cp "source/$f" proj/source/
             elif [ -f "$f" ]; then
@@ -102,18 +100,19 @@ jobs:
           echo "NDSTOOL: $NDSTOOL"
 
           echo "=== CREATE NDS ROM ==="
-          NITROFS_ARG=""
-          if [ -d "nitrofiles" ]; then
-            echo "Found nitrofiles directory, packing into ROM..."
-            NITROFS_ARG="-d nitrofiles"
+          NDSFS=""
+          if [ -d nitrofiles ]; then
+            NDSFS="-d nitrofiles"
+            echo "NitroFS: $(du -sh nitrofiles | cut -f1) of music/data goes into the ROM"
+          else
+            echo "WARNING: no nitrofiles/ folder - the ROM will have no music"
           fi
-
           "$NDSTOOL" -c proj/rumble-forest-ds.nds \
             -9 "$ARM9_ELF" \
             -7 "$ARM7_ELF" \
+            $NDSFS \
             -b proj/icon.bmp \
-            "RumbleForest;Homebrew;devkitPro" \
-            $NITROFS_ARG
+            "RumbleForest;Homebrew;devkitPro"
 
           echo "=== VERIFY ROM ==="
           ls -lh proj/rumble-forest-ds.nds

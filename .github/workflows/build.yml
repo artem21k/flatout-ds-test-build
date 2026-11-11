@@ -31,7 +31,7 @@ jobs:
           sed -i 's|^LIBS := -lnds9$|LIBS := -lnds9 -lm|' proj/Makefile
 
           rm -f proj/source/*
-          for f in main.c textures.h cars.h; do
+          for f in main.c textures.h cars.h sounds.h; do
             if [ -f "source/$f" ]; then
               cp "source/$f" proj/source/
             elif [ -f "$f" ]; then

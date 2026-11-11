@@ -6,6 +6,7 @@ on:
     paths:
       - '**.c'
       - '**.h'
+      - 'nitrofiles/**'
 
 jobs:
   build:
@@ -28,7 +29,8 @@ jobs:
           test -n "$T"
           cp -r "$T" proj
 
-          sed -i 's|^LIBS := -lnds9$|LIBS := -lnds9 -lm|' proj/Makefile
+          # Підключаємо -lfilesystem для роботи nitroFSInit() та -lm для математики
+          sed -i 's|-lnds9|-lfilesystem -lnds9 -lm|' proj/Makefile
 
           rm -f proj/source/*
           for f in main.c textures.h cars.h sounds.h; do
@@ -100,11 +102,18 @@ jobs:
           echo "NDSTOOL: $NDSTOOL"
 
           echo "=== CREATE NDS ROM ==="
+          NITROFS_ARG=""
+          if [ -d "nitrofiles" ]; then
+            echo "Found nitrofiles directory, packing into ROM..."
+            NITROFS_ARG="-d nitrofiles"
+          fi
+
           "$NDSTOOL" -c proj/rumble-forest-ds.nds \
             -9 "$ARM9_ELF" \
             -7 "$ARM7_ELF" \
             -b proj/icon.bmp \
-            "RumbleForest;Homebrew;devkitPro"
+            "RumbleForest;Homebrew;devkitPro" \
+            $NITROFS_ARG
 
           echo "=== VERIFY ROM ==="
           ls -lh proj/rumble-forest-ds.nds

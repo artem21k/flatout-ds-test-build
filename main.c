@@ -187,8 +187,8 @@ static int engineCh=-1;                    /* engine loop                       
 static int rollCh=-1, rollSfx=-1, skidCh=-1, nitroCh=-1;     /* looping sample channels (player)   */
 static int crashCool, voiceCool, gearCool, lastGear, lastNitro, engSfx=-1;
 static float engRpm;                                          /* smoothed engine speed 0..1.3 */
-#define ENG_VOL_IDLE 26                                      /* engine volume 0..127 at idle (quiet)      */
-#define ENG_VOL_MAX  72                                      /* ... at full revs; raise if too quiet       */
+#define ENG_VOL_IDLE 8                                       /* engine volume 0..127 at idle (quiet)      */
+#define ENG_VOL_MAX  22                                      /* ... at full revs; raise if too quiet       */
 #define GT_MODEL 4                                           /* carDefs[4] = BULLET GT -> Plymouth V8, all other cars -> Charger V8 */
 
 static void sndInit(void)
@@ -1916,14 +1916,27 @@ static void hFooter(const char *ok,const char *back,char backKey)
     hHint(x2,177,backKey,back);
 }
 
+/* 32x28 one-bit pictograms for the two game modes (made from the icon pictures; bit 31 = leftmost pixel) */
+static const unsigned int icoRace[28]={
+    0x00000000u,0x00000000u,0x00000000u,0x00000000u,0x03C00000u,0x03C70000u,0x0FE78780u,0x3E3FC7B8u,0x1F3ECFF8u,0x1FFE3C78u,0x00FE3C70u,0x00F1FEC0u,0x01F9E3C0u,0x078FE3C0u,0x07879BFCu,0x07FF9F1Cu,0x067D8F1Cu,0x003C7F38u,0x007C79F0u,0x01C3F8F0u,0x03C3F8FEu,0x03C3CF9Eu,0x0301C78Cu,0x00000780u,0x00000000u,0x00000000u,0x00000000u,0x00000000u
+};
+static const unsigned int icoDerby[28]={
+    0x00000000u,0x00000000u,0x00000000u,0x00000000u,0x00000000u,0x00F03C00u,0x00701E0Cu,0x00301C18u,0x00001800u,0x00000080u,0x80000180u,0xF8000100u,0xFF801C00u,0xFFF81800u,0xFE3E0003u,0xFFC000FFu,0xFFF807FFu,0xF0FF07FFu,0xE73F07E0u,0xCF9F07CFu,0xDFDF079Fu,0x9F9F0F9Fu,0x0F981FBFu,0x06101F9Fu,0x00000D8Fu,0x00000000u,0x00000000u,0x00000000u
+};
+static void hMaskIcon(const unsigned int *m,int cx,int cy,u16 c)
+{
+    int x,y;
+    for(y=0;y<28;y++) for(x=0;x<32;x++) if(m[y]&(0x80000000u>>x)) hpx(cx-16+x,cy-14+y,c);
+}
+
 static void hIcon(int kind,int cx,int cy,u16 c,u16 hole)
 {
     int i;
-    if(kind==0){                                   /* chequered flag */
-        int r,k;
-        hrect(cx-8,cy-10,2,21,c);
-        for(r=0;r<3;r++) for(k=0;k<4;k++) if(((r+k)&1)==0) hrect(cx-6+k*4,cy-10+r*4,4,4,c);
-    } else if(kind==1){                            /* crash burst */
+    if(kind==0){                                   /* single race: waving chequered flag */
+        hMaskIcon(icoRace,cx,cy,c);
+    } else if(kind==1){                            /* single derby: crashing cars */
+        hMaskIcon(icoDerby,cx,cy,c);
+    } else if(kind==9){                            /* (old crash burst, unused) */
         static const int sx[8]={0,8,12,8,0,-8,-12,-8}, sy[8]={-12,-8,0,8,12,8,0,-8};
         hdisc(cx,cy,6,c);
         for(i=0;i<8;i++){
@@ -2040,7 +2053,8 @@ static void hArenaThumb(int map,int x,int y,int w,int h)
 }
 
 /* ============================== MENU SCREENS =============================== */
-static const char *mainName[2]={"RALLY","DERBY"};
+static const char *mainName[3]={"SINGLE RACE","SINGLE DERBY","OPTIONS"};
+static const int mainIcon[3]={0,1,3};                          /* flag, crash burst, gear */
 
 static void hShadowC(int y,const char *t,u16 c,int sc)          /* centred text with a dark drop shadow (on the photo) */
 {
@@ -2055,11 +2069,11 @@ static void hudMain(void)
     hHeader("MAIN MENU");
     switch(mainSel){
         case 0:  siprintf(b,"%d LAPS ON DIRT TRACKS",lapsN); break;
-        default: siprintf(b,"LAST CAR RUNNING WINS"); break;
+        case 1:  siprintf(b,"LAST CAR RUNNING WINS"); break;
+        default: siprintf(b,"AI, LAPS AND SOUND"); break;
     }
     hShadowC(112,b,COL_CREAM,1);
-    htextS(5,31,"SELECT BUTTON: OPTIONS",COL_GRAY,1);
-    for(i=0;i<2;i++) hButton(86+i*50,122,i==mainSel,i);
+    for(i=0;i<3;i++) hButton(61+i*50,122,i==mainSel,mainIcon[i]);
     hrect(0,158,256,11,C15(20,15,8));                               /* label strip */
     hline(0,158,255,158,C15(120,80,10)); hline(0,168,255,168,C15(120,80,10));
     w=htextW(mainName[mainSel],1);
@@ -2281,7 +2295,8 @@ static void menuOk(void)
 {
     sndUi(1);
     if(menuScr==SC_MAIN){
-        modeSel=mainSel; mapSel=0; menuScr=SC_MAPS;
+        if(mainSel<2){ modeSel=mainSel; mapSel=0; menuScr=SC_MAPS; }
+        else menuScr=SC_OPT;
     } else if(menuScr==SC_MAPS){
         lastMap=(modeSel==0)?2+mapSel:mapSel;                    /* track chosen -> pick the car, then the race starts */
         menuScr=SC_CAR;
@@ -2302,7 +2317,7 @@ static void menuTouch(int tx,int ty)
         return;
     }
     if(menuScr==SC_MAIN){
-        for(i=0;i<2;i++) if(tx>=86+i*50&&tx<120+i*50&&ty>=122&&ty<156){ mainSel=i; menuOk(); }
+        for(i=0;i<3;i++) if(tx>=61+i*50&&tx<95+i*50&&ty>=122&&ty<156){ mainSel=i; menuOk(); }
     } else if(menuScr==SC_MAPS){
         for(i=0;i<2;i++){
             int x=i?134:10;
@@ -2319,7 +2334,8 @@ static void menuInput(u32 down,int touched,int tx,int ty)
 {
     int left=(down&KEY_LEFT)!=0, right=(down&KEY_RIGHT)!=0, up=(down&KEY_UP)!=0, dn=(down&KEY_DOWN)!=0;
     if(menuScr==SC_MAIN){
-        if(left||right) mainSel^=1;
+        if(left)  mainSel=(mainSel+2)%3;
+        if(right) mainSel=(mainSel+1)%3;
         if(down&KEY_START){ sndUi(1); startGame(lastMap); return; }
         if(down&KEY_SELECT){ sndUi(1); menuScr=SC_OPT; hudTimer=0; return; }   /* options live on the SELECT button now */
     } else if(menuScr==SC_MAPS){

@@ -29,8 +29,8 @@ jobs:
           test -n "$T"
           cp -r "$T" proj
 
-          # Підключаємо -lfilesystem для роботи nitroFSInit() та -lm для математики
-          sed -i 's|-lnds9|-lfilesystem -lnds9 -lm|' proj/Makefile
+          # Підключаємо -lfilesystem, -lfat (потрібна для nitroFSInit) та -lm
+          sed -i 's|-lnds9|-lfilesystem -lfat -lnds9 -lm|' proj/Makefile
 
           rm -f proj/source/*
           for f in main.c textures.h cars.h sounds.h; do

@@ -1923,6 +1923,9 @@ static const unsigned int icoRace[28]={
 static const unsigned int icoDerby[28]={
     0x00000000u,0x00000000u,0x00000000u,0x00000000u,0x00000000u,0x00F03C00u,0x00701E0Cu,0x00301C18u,0x00001800u,0x00000080u,0x80000180u,0xF8000100u,0xFF801C00u,0xFFF81800u,0xFE3E0003u,0xFFC000FFu,0xFFF807FFu,0xF0FF07FFu,0xE73F07E0u,0xCF9F07CFu,0xDFDF079Fu,0x9F9F0F9Fu,0x0F981FBFu,0x06101F9Fu,0x00000D8Fu,0x00000000u,0x00000000u,0x00000000u
 };
+static const unsigned int icoGear[28]={
+    0x00000000u,0x00000000u,0x00000930u,0x00000FF0u,0x00007FFCu,0x00007FFCu,0x0000FFFEu,0x0000FC7Eu,0x0000F83Eu,0x0030FC3Fu,0x0373FE7Eu,0x03FFFFFCu,0x1FFFFFFEu,0x1FFFFFF0u,0x1FFFFFF8u,0x7FFFFE40u,0x7F9FF800u,0x3F0FF000u,0x7E0FF800u,0x7F07FC00u,0x3F07F800u,0x3FFFE000u,0x7FFFF000u,0x0FFFF000u,0x0FFF8000u,0x0DFD8000u,0x00CC0000u,0x00000000u
+};
 static void hMaskIcon(const unsigned int *m,int cx,int cy,u16 c)
 {
     int x,y;
@@ -1950,11 +1953,8 @@ static void hIcon(int kind,int cx,int cy,u16 c,u16 hole)
         hrect(cx-4,cy-5,3,3,hole); hrect(cx+1,cy-5,3,3,hole);
         hdisc(cx-6,cy+6,3,c); hdisc(cx+6,cy+6,3,c);
         hdisc(cx-6,cy+6,1,hole); hdisc(cx+6,cy+6,1,hole);
-    } else {                                       /* gear */
-        static const int px[8]={0,6,9,6,0,-6,-9,-6}, py[8]={-9,-6,0,6,9,6,0,-6};
-        hdisc(cx,cy,7,c);
-        for(i=0;i<8;i++) hrect(cx+px[i]-2,cy+py[i]-2,4,4,c);
-        hdisc(cx,cy,3,hole);
+    } else {                                       /* options: two gears */
+        hMaskIcon(icoGear,cx,cy,c);
     }
 }
 static void hButton(int x,int y,int sel,int kind)

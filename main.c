@@ -1894,7 +1894,6 @@ static void hHeader(const char *t)
     hcopy(barTop,0,24);
     hrect(6,5,w,14,COL_DARK); hframe(6,5,w,14,C15(120,80,10));
     htextS(13,8,t,COL_CREAM,1);
-    hLogo(256-IMGLOGO_W-4,-1,1);
 }
 static void hHint(int x,int y,char key,const char *txt)
 {
@@ -1955,18 +1954,15 @@ static void hIcon(int kind,int cx,int cy,u16 c,u16 hole)
 }
 static void hButton(int x,int y,int sel,int kind)
 {
-    if(sel){
-        hrect(x-3,y-3,40,40,C15(255,214,110));
-        hrect(x-1,y-1,36,36,COL_WHITE);
-        hrect(x,y,34,34,C15(240,230,196));
-        hrect(x+1,y+1,32,3,C15(255,252,235));
-        hIcon(kind,x+17,y+17,C15(46,34,14),C15(240,230,196));
-    } else {
-        hrect(x,y,34,34,COL_DARK);
-        hframe(x,y,34,34,C15(226,166,22));
-        hframe(x+1,y+1,32,32,C15(110,72,10));
-        hIcon(kind,x+17,y+17,C15(244,190,30),COL_DARK);
-    }
+    int j;
+    int rt=sel?255:222, gt=sel?226:156, bt=sel?96:28;           /* tile gradient: top colour ...   */
+    int rb=sel?250:176, gb=sel?184:112, bb=sel?36:14;           /* ... to bottom colour            */
+    if(sel) hrect(x-3,y-3,40,40,C15(255,240,170));              /* bright halo around the selected button */
+    hrect(x-1,y-1,36,36,COL_DARK);                              /* black frame */
+    for(j=0;j<34;j++)
+        hrect(x,y+j,34,1,C15(rt+(rb-rt)*j/33,gt+(gb-gt)*j/33,bt+(bb-bt)*j/33));
+    if(sel) hrect(x+1,y+1,32,2,C15(255,250,200));               /* highlight line */
+    hIcon(kind,x+17,y+17,C15(14,10,6),COL_DARK);                /* black pictogram on yellow */
 }
 static void hCarSil(int cx,int cy,int w,const CarDef *d,u16 col,u16 dark)
 {
@@ -2063,6 +2059,7 @@ static void hudMain(void)
     int i,w; char b[40];
     hcopy(imgMenuPhoto,0,HUDH);
     hHeader("MAIN MENU");
+    hLogo(256-IMGLOGO_W-3,0,1);                                      /* logo only here, so it never collides with the in-game MENU button */
     switch(mainSel){
         case 0:  siprintf(b,"%d LAPS ON DIRT TRACKS",lapsN); break;
         case 1:  siprintf(b,"LAST CAR RUNNING WINS"); break;

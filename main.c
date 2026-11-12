@@ -2459,9 +2459,16 @@ int main(void)
     bootMsg("4 MENU DATA OK");
     sndInit();
     bootMsg("5 SOUND OK");
-    musInit();
 #if ENABLE_SOUND
-    bootMsg(musFsOk?"6 NITROFS OK (MUSIC ON)":"6 NITROFS FAILED (NO MUSIC)");
+    /* Some emulators freeze inside nitroFSInit (the ROM file system the music is read from).
+       Hold B while the game starts to skip it: the game then runs without music.            */
+    bootMsg("6 MUSIC: HOLD B TO SKIP");
+    {
+        int i, skip=0;
+        for(i=0;i<75;i++){ scanKeys(); if(keysHeld()&KEY_B) skip=1; swiWaitForVBlank(); }
+        if(skip) bootMsg("7 MUSIC SKIPPED (NO MUSIC)");
+        else { musInit(); bootMsg(musFsOk?"7 NITROFS OK (MUSIC ON)":"7 NITROFS FAILED (NO MUSIC)"); }
+    }
 #endif
     state = ST_SPLASH;
     splashT = 300;

@@ -2418,6 +2418,15 @@ static void gameFrame(u32 held,u32 down,int touched,int tx,int ty)
 }
 
 #ifndef HOST_TEST
+static int bootY=4;
+static void bootMsg(const char *t)                     /* shows start-up progress on the bottom screen */
+{
+    int x,y;
+    if(bootY==4) for(y=0;y<HUDH;y++) for(x=0;x<HUDW;x++) hudBuf[y*HUDW+x]=C15(8,8,16);
+    htextS(4,bootY,t,COL_CREAM,1); bootY+=10;
+    hudPresent();
+}
+
 int main(void)
 {
     touchPosition tp;
@@ -2430,10 +2439,11 @@ int main(void)
     vramSetBankD(VRAM_D_MAIN_BG_0x06000000);
     banFb=(u16*)bgGetGfxPtr(bgInit(2,BgType_Bmp16,BgSize_B16_256x256,0,0));
     { int i; for(i=0;i<256*256;i++) banFb[i]=0; }   /* fully transparent */
-    bgSetPriority(2,0);                               /* banner above the 3D picture */
-    bgSetPriority(0,1);
+    bootMsg("1 VIDEO OK");
 
     glInit();
+    bgSetPriority(2,0);                               /* title picture / banner above the 3D picture (after glInit, it may reset BG0) */
+    bgSetPriority(0,1);
     glEnable(GL_TEXTURE_2D);
     glEnable(GL_ANTIALIAS);
     glEnable(GL_BLEND);
@@ -2441,11 +2451,18 @@ int main(void)
     glClearPolyID(63);
     glClearDepth(0x7FFF);
     glViewport(0,0,255,191);
+    bootMsg("2 GL OK");
 
     loadTextures();
+    bootMsg("3 TEXTURES OK");
     initMenuData();
+    bootMsg("4 MENU DATA OK");
     sndInit();
+    bootMsg("5 SOUND OK");
     musInit();
+#if ENABLE_SOUND
+    bootMsg(musFsOk?"6 NITROFS OK (MUSIC ON)":"6 NITROFS FAILED (NO MUSIC)");
+#endif
     state = ST_SPLASH;
     splashT = 300;
 

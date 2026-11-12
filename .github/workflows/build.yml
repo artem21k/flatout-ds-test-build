@@ -28,7 +28,7 @@ jobs:
           test -n "$T"
           cp -r "$T" proj
 
-          sed -i 's|^LIBS := -lnds9$|LIBS := -lfilesystem -lfat -lnds9 -lm|' proj/Makefile
+          sed -i 's|^LIBS := -lnds9$|LIBS := -lnds9 -lm|' proj/Makefile
 
           rm -f proj/source/*
           for f in main.c textures.h cars.h sounds.h images.h; do
@@ -41,6 +41,31 @@ jobs:
               exit 1
             fi
           done
+
+          echo "=== MUSIC DATA (built into the game) ==="
+          python3 - <<'PY'
+          import os
+          names = ['menu', 'race1', 'race2', 'race3', 'race4']
+          out = open('proj/source/music_data.c', 'w')
+          out.write('/* generated from music/*.bin by the build */\n')
+          for n in names:
+              data = b''
+              for d in ('music', 'source/music', 'nitrofiles/music', '.'):
+                  p = os.path.join(d, n + '.bin')
+                  if os.path.isfile(p):
+                      data = open(p, 'rb').read()
+                      print('music', n, len(data), 'bytes from', p)
+                      break
+              out.write('const unsigned int musSize_%s = %d;\n' % (n, len(data)))
+              out.write('const unsigned char musData_%s[%d] __attribute__((aligned(4))) = {\n' % (n, max(len(data), 4)))
+              for i in range(0, len(data), 32):
+                  out.write(','.join(str(b) for b in data[i:i + 32]) + ',\n')
+              if not data:
+                  out.write('0,0,0,0\n')
+              out.write('};\n')
+          out.close()
+          PY
+          test -s proj/source/music_data.c
 
           echo "=== BUILD ARM9 ==="
           make -C proj TARGET=rumble-forest-ds clean
@@ -100,17 +125,9 @@ jobs:
           echo "NDSTOOL: $NDSTOOL"
 
           echo "=== CREATE NDS ROM ==="
-          NDSFS=""
-          if [ -d nitrofiles ]; then
-            NDSFS="-d nitrofiles"
-            echo "NitroFS: $(du -sh nitrofiles | cut -f1) of music/data goes into the ROM"
-          else
-            echo "WARNING: no nitrofiles/ folder - the ROM will have no music"
-          fi
           "$NDSTOOL" -c proj/rumble-forest-ds.nds \
             -9 "$ARM9_ELF" \
             -7 "$ARM7_ELF" \
-            $NDSFS \
             -b proj/icon.bmp \
             "RumbleForest;Homebrew;devkitPro"
 

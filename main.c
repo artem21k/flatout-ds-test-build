@@ -385,7 +385,19 @@ static int musFsOk, musCh=-1, musIsMenu, musRaceNext, musBufPos, musBufLen, musH
 static u32 musLeft, musWr, musPlay, musEndAbs, musSeed;
 static u16 musLastCnt;
 
-static void musInit(void){ musFsOk=nitroFSInit(NULL)?1:0; }
+extern unsigned int *sysArgvPtr __asm__("__system_argv") __attribute__((weak));   /* libnds' argv block; first word = argvMagic */
+static void musInit(void)
+{
+    unsigned int saved=0;
+    int hasArgv=(&sysArgvPtr!=NULL && sysArgvPtr!=NULL);
+    /* 1st try: read the file system straight from the cartridge/ROM. Without an argv path libfilesystem does not touch
+       FAT/DLDI, which is what freezes some emulators.                                                                  */
+    if(hasArgv){ saved=sysArgvPtr[0]; sysArgvPtr[0]=0; }
+    musFsOk=nitroFSInit(NULL)?1:0;
+    if(hasArgv) sysArgvPtr[0]=saved;
+    /* 2nd try (flash cards): use the path the loader passed in argv */
+    if(!musFsOk && hasArgv && saved!=0) musFsOk=nitroFSInit(NULL)?1:0;
+}
 
 static void musStop(void)
 {
@@ -2418,10 +2430,11 @@ static void gameFrame(u32 held,u32 down,int touched,int tx,int ty)
 }
 
 #ifndef HOST_TEST
-static int bootY=4;
+static int bootY=4, bootSkip=0;
 static void bootMsg(const char *t)                     /* shows start-up progress on the bottom screen */
 {
     int x,y;
+    scanKeys(); if(keysHeld()&KEY_B) bootSkip=1;        /* holding B from the moment the game is launched is enough */
     if(bootY==4) for(y=0;y<HUDH;y++) for(x=0;x<HUDW;x++) hudBuf[y*HUDW+x]=C15(8,8,16);
     htextS(4,bootY,t,COL_CREAM,1); bootY+=10;
     hudPresent();
@@ -2464,10 +2477,14 @@ int main(void)
        Hold B while the game starts to skip it: the game then runs without music.            */
     bootMsg("6 MUSIC: HOLD B TO SKIP");
     {
-        int i, skip=0;
-        for(i=0;i<75;i++){ scanKeys(); if(keysHeld()&KEY_B) skip=1; swiWaitForVBlank(); }
-        if(skip) bootMsg("7 MUSIC SKIPPED (NO MUSIC)");
-        else { musInit(); bootMsg(musFsOk?"7 NITROFS OK (MUSIC ON)":"7 NITROFS FAILED (NO MUSIC)"); }
+        int i;
+        for(i=0;i<60;i++){ scanKeys(); if(keysHeld()&KEY_B) bootSkip=1; swiWaitForVBlank(); }
+        if(bootSkip) bootMsg("7 MUSIC SKIPPED (NO MUSIC)");
+        else {
+            bootMsg("7 STARTING NITROFS...");
+            musInit();
+            bootMsg(musFsOk?"8 NITROFS OK (MUSIC ON)":"8 NITROFS FAILED (NO MUSIC)");
+        }
     }
 #endif
     state = ST_SPLASH;

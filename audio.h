@@ -170,7 +170,7 @@ static void sndDrive(const Car *p,int active)
     lastNitro=nit;
 
     /* gear shift on the way up */
-    gear=(int)(spd/5.5f); if(gear>5) gear=5;
+    gear=(int)(spd/(p->vtop*0.2f)); if(gear>5) gear=5;
     if(gear>lastGear && gearCool<=0){ sfxPlay(SFX_GEARSHIFT_1,55,64,100); gearCool=25; }
     lastGear=gear;
 

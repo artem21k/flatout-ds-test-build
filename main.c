@@ -48,6 +48,14 @@
 #define REVACC   10.0f
 #define MAXREV   7.0f
 #define DRAG     0.45f
+#define SPD_KMH  5.0f          /* speedometer: km/h = world units per second * SPD_KMH */
+#define GW       56.0f         /* grip "gravity": a tyre can give about mu*GW units/s^2 */
+#define HCG      0.35f         /* height of the centre of gravity (weight transfer) */
+#define AI_GRIP  20.0f         /* cornering grip the AI plans with (units/s^2), a bit below what the tyres give */
+#define AI_DECEL 28.0f         /* braking the AI plans with (units/s^2) */
+/* race top speed per carDefs index, world units/s (x SPD_KMH = km/h):
+   ROAMER 150, MALICE 180, NEVADA 260, INSETTA 290, BULLET GT 350, CANYON 320, TRUCK 190, FLATMOBILE 500 */
+static const float carVmax[8]={ 30.0f,36.0f,52.0f,58.0f,70.0f,64.0f,38.0f,100.0f };
 
 #define TRIS_MODE  0            /* glBegin hardware values */
 #define QUADS_MODE 1
@@ -98,7 +106,10 @@ typedef struct {
     int   sCrash, sWreck, sBonus;   /* derby score: damage dealt, wrecks caused, survivor bonus */
     int   r, g, b;
     int   model;                /* index into carDefs */
-    float kTop, kAcc, kHan, kStr, mass, kNit, cr;
+    float kTop, kAcc, kHan, kStr, mass, kNit, cr, vtop;
+    float w, vlat, wb, wf, mu, aL, aY;       /* yaw rate, sideways speed, wheelbase, front weight share, grip, smoothed accelerations */
+    int   awd, hbOn;
+    float sp, spv, sr, srv, sy, syv;         /* suspension (drawing only): pitch, roll, heave + their speeds */
     int   mr, mg, mb;           /* minimap colour (r,g,b above = paint tint, 255 = livery as painted) */
 } Car;
 
@@ -244,7 +255,9 @@ static void buildTrack(int which)
     for(i=0;i<npts;i++){
         int j=(i+1)%npts, m=(i+6)%npts, nn=(i+1)%npts;
         float ang=fabsf(wrapa(trkH[m]-trkH[nn]));
-        float lim=36.0f-24.0f*ang;
+        float Rc=5.0f*(total/(float)npts)/(ang>0.02f?ang:0.02f);          /* corner radius over 5 road segments */
+        float lim, gR=AI_GRIP*Rc, dn=1.0f-gR*0.0001f;                   /* speed the tyres can still hold on this radius (incl. downforce) */
+        lim=(dn>0.15f)?sqrtf(gR/dn):120.0f;
         float lx0=roadX[i]+nrmX[i]*HALFW, lz0=roadZ[i]+nrmZ[i]*HALFW;
         float rx0=roadX[i]-nrmX[i]*HALFW, rz0=roadZ[i]-nrmZ[i]*HALFW;
         float lx1=roadX[j]+nrmX[j]*HALFW, lz1=roadZ[j]+nrmZ[j]*HALFW;
@@ -252,7 +265,7 @@ static void buildTrack(int which)
         float cx=0.5f*(roadX[i]+roadX[j]), cz=0.5f*(roadZ[i]+roadZ[j]);
         float len=sqrtf(seg2[i]);
         int *v=segV[i];
-        limitSp[i]=clampf(lim,13.0f,34.0f);
+        limitSp[i]=clampf(lim,13.0f,120.0f);
         v[0]=cl16(lx0-cx); v[1]=0; v[2]=cl16(lz0-cz);
         v[3]=cl16(rx0-cx); v[4]=0; v[5]=cl16(rz0-cz);
         v[6]=cl16(rx1-cx); v[7]=0; v[8]=cl16(rz1-cz);
@@ -322,7 +335,7 @@ static void initCar(Car *c,int k,float x,float z,float h)
     c->x=x; c->z=z; c->h=h; c->sn=sinf(h); c->cs=cosf(h);
     c->hp=100.0f; c->nitro=25.0f; c->alive=1;
     c->isPlayer=(k==playerIdx);
-    c->skill=c->isPlayer?1.0f:(0.80f+0.04f*(float)(k%5))*diffSkill[diff];
+    c->skill=c->isPlayer?1.0f:((gmode==GM_RACE?0.90f+0.025f*(float)(k%5):0.80f+0.04f*(float)(k%5))*diffSkill[diff]);
     c->lane=((float)((k*37)%9)-4.0f)*0.8f;
     {
         const CarDef *d;
@@ -331,6 +344,15 @@ static void initCar(Car *c,int k,float x,float z,float h)
         d=&carDefs[c->model];
         c->kTop=0.75f+0.04f*d->top; c->kAcc=0.70f+0.06f*d->acc; c->kHan=0.80f+0.04f*d->han;
         c->kStr=1.35f-0.07f*d->str; c->mass=0.60f+0.12f*d->wgt; c->kNit=0.60f+0.08f*d->nit;
+        c->vtop=MAXSPD*c->kTop;
+        { static const float muCls[4]={1.00f,1.15f,1.20f,1.25f};                  /* grip per class (derby cars on loose dirt = slidey) */
+          c->wb=(float)(d->ax[0].b-d->ax[1].b)*(CAR_SCALE/4096.0f);
+          c->awd=(d->drive[0]=='4'); c->wf=c->awd?0.50f:0.48f; c->mu=muCls[d->cls&3]; }
+        if(gmode==GM_RACE){                              /* race: much higher top speeds; rivals are never slower than 95% of YOUR car */
+            float vt=carVmax[c->model];
+            if(!c->isPlayer){ float pv=carVmax[carSel]*0.95f; if(pv>vt) vt=pv; }
+            c->vtop=vt; c->kTop=vt/MAXSPD;
+        }
         static const unsigned char aiTint[5][3]={{255,255,255},{255,232,220},{222,236,255},{236,255,226},{255,252,205}};
         c->cr=d->cr;
         if(c->isPlayer){ c->r=c->g=c->b=255; c->mr=d->r; c->mg=d->g; c->mb=d->b; }
@@ -364,7 +386,7 @@ static void placeOnTrack(Car *c,int i,float lane)
 {
     c->x=roadX[i]+nrmX[i]*lane; c->z=roadZ[i]+nrmZ[i]*lane;
     c->h=trkH[i]; c->sn=sinf(c->h); c->cs=cosf(c->h);
-    c->vx=c->vz=0.0f; c->spd=0.0f; c->idx=i; c->stuck=0; c->reverseT=0;
+    c->vx=c->vz=0.0f; c->spd=0.0f; c->w=0.0f; c->vlat=0.0f; c->aL=0.0f; c->aY=0.0f; c->idx=i; c->stuck=0; c->reverseT=0;
 }
 
 static void hitFx(Car *c,float dmg,float nx,float nz)
@@ -394,42 +416,112 @@ static void hitFx(Car *c,float dmg,float nx,float nz)
     corner=(a>0.0f?1:0)|(b>0.0f?2:0);
     c->def[corner]+=(int)(dmg*90.0f);
     if(c->def[corner]>1500) c->def[corner]=1500;
-    c->h+=-a*(b>0.0f?1.0f:-1.0f)*dmg*0.012f;      /* spin from off-centre hits */
+    c->w+=-a*(b>0.0f?1.0f:-1.0f)*dmg*0.25f;        /* spin from off-centre hits */
+    c->spv+=-b*dmg*0.12f; c->srv+=a*dmg*0.12f; c->syv+=dmg*0.05f;     /* the suspension takes the knock */
     if(c->isPlayer) shake=clampf(shake+dmg*0.02f,0.0f,0.6f);
 }
 
-/* arcade car physics: forward speed + lateral slip */
+/* ---- vehicle dynamics ---------------------------------------------------------------------------------------
+   Two-axle "bicycle" model: every axle makes a sideways force from its slip angle (tyre curve with a peak and a fall-off, so
+   you can really lose the car), limited by a friction circle together with throttle / brake force. Weight moves between the
+   axles when accelerating / braking (nose dive, squat), RWD wheelspin kills rear grip (power oversteer), the HANDBRAKE locks
+   the rear wheels and the tail swings out. A spring-damper "suspension" (pitch / roll / heave) follows the accelerations and is
+   used for drawing only. Runs 2 sub-steps per frame so the stiff tyre forces stay stable. */
+static float steerLock(float v){ return 0.55f/sqrtf(1.0f+v*v*0.005f); }      /* max front wheel angle (rad), smaller at speed */
+
+static float tireF(float al,float G,float k)                               /* lateral force for slip angle al, grip limit G, stiffness k */
+{
+    float x=k*al, aa=fabsf(al), f=x/sqrtf(1.0f+x*x);
+    if(aa>0.25f) f*=1.0f-0.18f*clampf((aa-0.25f)/0.35f,0.0f,1.0f);          /* past the peak the tyre slides and gives less */
+    return -G*f;
+}
+
 static void driveCar(Car *c,float thr,float strTgt,int nit,int hb,int onRoad)
 {
-    float fx=c->sn, fz=-c->cs, rx=c->cs, rz=c->sn;
-    float vf=c->vx*fx+c->vz*fz, vl=c->vx*rx+c->vz*rz;
     float power=0.55f+0.45f*(c->hp*0.01f);
-    float maxsp=MAXSPD*power*c->skill*c->kTop, acc=ACCEL*c->kAcc, grip, spdf, yaw;
+    float maxsp=MAXSPD*power*c->skill*c->kTop, acc=ACCEL*c->kAcc;
+    float dragK, brk=BRAKE, mu=c->mu*(onRoad?1.0f:0.70f);
+    float L=c->wb, a=L*(1.0f-c->wf), b=L*c->wf, Iz=1.8f*a*b, dt=DT*0.5f;
+    float vf,vl,w,fx,fz,rx,rz;
+    int sub;
 
     c->nitroOn=0;
-    if(nit && c->nitro>0.0f){ acc*=2.0f; maxsp*=1.4f; c->nitro-=0.55f; if(c->nitro<0.0f)c->nitro=0.0f; c->nitroOn=1; }
-    if(!onRoad) maxsp*=0.6f;
-    c->steer+=(strTgt-c->steer)*0.25f;
+    if(c->vtop>40.0f) brk=BRAKE*clampf(c->vtop/40.0f,1.0f,2.2f);
+    dragK=0.27f*acc/fmaxf(c->vtop,30.0f);                                    /* engine fades with speed; drag set so the car just reaches its top speed */
+    if(nit && c->nitro>0.0f){ acc*=2.0f; maxsp*=(c->vtop>40.0f)?1.15f:1.4f; c->nitro-=0.55f; if(c->nitro<0.0f)c->nitro=0.0f; c->nitroOn=1; }
+    if(!onRoad){ maxsp*=0.6f; dragK+=0.9f; }
+    c->steer+=(strTgt-c->steer)*(0.25f/(1.0f+fabsf(c->spd)*0.015f));
+    c->hbOn=hb;
 
-    if(thr>0.0f){ if(vf<maxsp) vf+=acc*thr*DT; else vf-=(vf-maxsp)*2.0f*DT; }
-    else if(thr<0.0f){ if(vf>0.5f) vf+=BRAKE*thr*DT; else if(vf>-MAXREV) vf+=REVACC*thr*DT; }
-    vf-=vf*DRAG*DT;
-    if(!onRoad) vf-=vf*1.2f*DT;
+    fx=c->sn; fz=-c->cs; rx=c->cs; rz=c->sn;
+    vf=c->vx*fx+c->vz*fz; vl=c->vx*rx+c->vz*rz; w=c->w;
 
-    grip=hb?1.5f:(onRoad?9.0f:5.5f);
-    vl-=vl*clampf(grip*DT,0.0f,1.0f);
+    for(sub=0;sub<2;sub++){
+        float v=fabsf(vf), vfs=(v<2.5f)?2.5f:v;
+        float aEng=0.0f, aBr=0.0f, aHB=0.0f, Wf, Gf, Gr, Gyf, Gyr, Fxf, Fxr, Fyf, Fyr, delta, cd, sd, lim;
+        float dvf, dvl, dw, kw, sdyn, dfo;
 
-    spdf=fabsf(vf);
-    yaw=c->steer*2.5f*c->kHan*clampf(spdf/5.0f,0.0f,1.0f)/(1.0f+spdf*0.025f);
-    if(hb) yaw*=1.5f;
-    if(vf<0.0f) yaw=-yaw;
-    c->h=wrapa(c->h+yaw*DT);
+        if(thr>0.0f) aEng=(vf<maxsp)?acc*thr*(1.0f-0.7f*clampf(vf/maxsp,0.0f,1.0f)):-(vf-maxsp)*2.0f;
+        else if(thr<0.0f){ if(vf>0.5f) aBr=brk*thr; else if(vf>-MAXREV) aEng=REVACC*thr; }
+        if(hb && v>1.0f) aHB=(vf>0.0f)?-15.0f:15.0f;                       /* handbrake: rear wheels braked / locked */
 
+        Wf=clampf(c->wf-c->aL*HCG/(L*GW),0.20f,0.80f);                       /* weight transfer: accelerating loads the rear */
+        dfo=1.0f+v*v*0.0001f;                                                /* a little downforce at speed */
+        Gf=mu*GW*Wf*dfo*0.95f; Gr=mu*GW*(1.0f-Wf)*dfo*1.25f;        /* rear a touch grippier = stable, understeers first */
+
+        Fxf=aEng*(c->awd?0.4f:0.0f)+aBr*0.6f;
+        Fxr=aEng*(c->awd?0.6f:1.0f)+aBr*0.4f+aHB;
+        lim=0.98f*Gf; Fxf=clampf(Fxf,-lim,lim);
+        lim=0.98f*Gr; Fxr=clampf(Fxr,-lim,lim);
+        {   float cf=(Fxf<0.0f)?Fxf:0.55f*Fxf, cr=(Fxr<0.0f)?Fxr:0.55f*Fxr;      /* friction circle: braking uses all of it, engine thrust part of it */
+            Gyf=sqrtf(fmaxf(Gf*Gf-cf*cf,0.01f*Gf*Gf));                       /* grip left for cornering */
+            Gyr=sqrtf(fmaxf(Gr*Gr-cr*cr,0.01f*Gr*Gr)); }
+        if(hb) Gyr*=0.25f;                                                   /* locked rear wheels slide */
+
+        delta=c->steer*steerLock(v);
+        if(c->isPlayer && !hb && v>6.0f){                                    /* counter-steer help for a digital d-pad (only when really sliding) */
+            float be=vl/vfs;
+            if(be>0.15f) delta+=clampf(0.6f*(be-0.15f),0.0f,0.2f);
+            else if(be<-0.15f) delta+=clampf(0.6f*(be+0.15f),-0.2f,0.0f);
+        }
+        cd=1.0f-0.5f*delta*delta; sd=delta;
+
+        {   float vaf=vl+a*w-delta*vfs, var=vl-b*w, m;                       /* sideways slip speed of each axle (front relative to its wheels) */
+            Fyf=tireF(vaf/vfs,Gyf,10.0f); m=0.5f*fabsf(vaf)/dt; if(Fyf>m)Fyf=m; else if(Fyf<-m)Fyf=-m;
+            Fyr=tireF(var/vfs,Gyr,13.0f);       m=0.5f*fabsf(var)/dt; if(Fyr>m)Fyr=m; else if(Fyr<-m)Fyr=-m;
+        }
+        dvf=Fxf*cd+Fxr+vl*w-fabsf(Fyf*sd);
+        dvl=Fyf*cd+Fyr+Fxf*sd-vf*w;
+        dw =(a*(Fyf*cd+Fxf*sd)-b*Fyr)/Iz-w*1.5f;                                      /* + yaw damping: keeps the tail from whipping at speed */
+
+        /* crawling / reversing: plain kinematic steering so nothing jitters at a standstill */
+        kw=vf*delta/L;
+        sdyn=clampf((vf-1.0f)*0.2f,0.0f,1.0f);
+        dvl=dvl*sdyn+(-vl*12.0f)*(1.0f-sdyn);
+        dw =dw*sdyn+(kw-w)*10.0f*(1.0f-sdyn);
+
+        c->aL+=((Fxf*cd+Fxr-fabsf(Fyf*sd))-dragK*vf-c->aL)*0.15f;           /* load transfer follows the real tyre/engine force, not the turning-frame term */
+        vf+=dvf*dt; vf-=vf*dragK*dt;
+        vl+=dvl*dt;
+        w=clampf(w+dw*dt,-6.0f,6.0f);
+        c->h=wrapa(c->h+w*dt);
+    }
+    c->w=w; c->vlat=vl; c->aY+=(vf*w-c->aY)*0.2f;
     c->sn=sinf(c->h); c->cs=cosf(c->h);
     fx=c->sn; fz=-c->cs; rx=c->cs; rz=c->sn;
     c->vx=fx*vf+rx*vl; c->vz=fz*vf+rz*vl;
     c->x+=c->vx*DT; c->z+=c->vz*DT;
     c->spd=vf;
+
+    {   /* suspension: springs follow the accelerations (nose dives under braking, squats under power, leans in corners) */
+        float spd=fabsf(vf), tgtP=clampf(0.0022f*c->aL,-0.13f,0.13f), tgtR=clampf(-0.0024f*c->aY,-0.12f,0.12f);
+        float bump=(onRoad?0.010f:0.040f)*(spd*0.033f);
+        c->spv+=((tgtP-c->sp)*110.0f-c->spv*8.0f)*DT; c->sp+=c->spv*DT;
+        c->srv+=((tgtR-c->sr)*110.0f-c->srv*8.0f)*DT; c->sr+=c->srv*DT;
+        if(spd>3.0f) c->syv+=(rndf()-0.5f)*bump*DT*60.0f;
+        c->syv+=(-c->sy*160.0f-c->syv*9.0f)*DT; c->sy+=c->syv*DT;
+        c->sp=clampf(c->sp,-0.16f,0.16f); c->sr=clampf(c->sr,-0.16f,0.16f); c->sy=clampf(c->sy,-0.15f,0.15f);
+    }
 }
 
 /* ================================= AI ====================================== */
@@ -452,14 +544,26 @@ static void aiThink(Car *c,int k,float *thr,float *str,int *nit)
         else { tx=cars[t].x+cars[t].vx*0.3f; tz=cars[t].z+cars[t].vz*0.3f; }
         if(fabsf(c->x)>arenaH-7.0f||fabsf(c->z)>arenaH-7.0f){ tx=0.0f; tz=0.0f; }
     } else {
-        int ti=(c->idx+3)%npts;
-        float lim=limitSp[c->idx]*c->skill;
+        int ti=(c->idx+2+(int)(sp*0.02f))%npts, ah, nlook=4+(int)(sp*0.35f);      /* look further ahead the faster we go */
+        float lim=1e9f, segL=trackTotal/(float)npts;
+        if(nlook>40) nlook=40;
+        for(ah=0;ah<nlook;ah++){                                                  /* brake early enough for the corners ahead */
+            float v=limitSp[(c->idx+ah)%npts]*c->skill, dist=(float)ah*segL;
+            v=sqrtf(v*v+2.0f*AI_DECEL*dist);
+            if(v<lim) lim=v;
+        }
         tx=roadX[ti]+nrmX[ti]*c->lane; tz=roadZ[ti]+nrmZ[ti]*c->lane;
         if(sp>lim+2.0f) *thr=-0.7f;
+        else if(sp>lim-5.0f) *thr=0.3f;                                          /* lift off near the limit: rear tyres need grip to corner */
     }
     desired=atan2f(tx-c->x,-(tz-c->z));
     diff2=wrapa(desired-c->h);
-    *str=clampf(diff2*2.5f,-1.0f,1.0f);
+    {   float ddx=tx-c->x, ddz=tz-c->z, Ld=sqrtf(ddx*ddx+ddz*ddz);                 /* pure pursuit: wheel angle that arcs onto the target */
+        if(Ld<6.0f) Ld=6.0f;
+        *str=clampf(2.0f*c->wb*sinf(diff2)/Ld/steerLock(sp),-1.0f,1.0f);
+        if(fabsf(diff2)>1.0f) *str=(diff2>0.0f)?1.0f:-1.0f;
+    }
+    if(gmode==GM_RACE && sp>25.0f && fabsf(*str)>0.5f && *thr>0.5f) *thr=0.5f;       /* no full power while the wheels are turned hard */
     if(fabsf(diff2)<0.15f && c->nitro>50.0f && (gmode==GM_DERBY || limitSp[c->idx]>28.0f)) *nit=1;
 
     if(c->reverseT>0){ *thr=-1.0f; *str=-*str; c->reverseT--; }
@@ -662,6 +766,8 @@ static void emitCarEffects(Car *c)
     }
     if(spd>9.0f && (frameNo&3)==(int)(c->mr&3))
         spawnPart(PT_DUST,bx,0.2f,bz,(rndf()-0.5f)*1.5f,0.8f,(rndf()-0.5f)*1.5f,0.7f);
+    if(spd>8.0f && (fabsf(c->vlat)>4.5f || c->hbOn) && (frameNo&1)==0)               /* tyre smoke while sliding */
+        spawnPart(PT_SMOKE,bx,0.25f,bz,(rndf()-0.5f)*1.0f,0.6f,(rndf()-0.5f)*1.0f,0.9f);
     if(c->hp<45.0f && (frameNo&3)==0)
         spawnPart(c->hp<20.0f?PT_BLACK:PT_SMOKE,c->x+c->sn*c->cr*0.9f,1.1f,c->z-c->cs*c->cr*0.9f,(rndf()-0.5f)*0.5f,1.5f,(rndf()-0.5f)*0.5f,1.0f);
     if(c->nitroOn)
@@ -926,7 +1032,8 @@ static void carTint(const Car *c,int *tr,int *tg,int *tb)
 }
 
 /* vertex of a car part: (a,y,b) in car space -> rotated by heading, UV in atlas */
-#define VX(pp,u,v) tv((u),(v),((pp)[0]*C+(pp)[2]*S)>>12,(pp)[1],((pp)[0]*S-(pp)[2]*C)>>12)
+static int bodyRoll, bodyPitch, bodyHeave;       /* suspension tilt of the car being drawn (rad*4096, heave in model units) */
+#define VX(pp,u,v) tv((u),(v),((pp)[0]*C+(pp)[2]*S)>>12,(pp)[1]+((((pp)[0]*bodyRoll)+((pp)[2]*bodyPitch))>>12)+bodyHeave,((pp)[0]*S-(pp)[2]*C)>>12)
 
 /* flat-coloured box (extras) - samples the white swatch of the atlas, tinted by vertex colour */
 static void xBox(int C,int S,const XBox *x,int f100)
@@ -947,6 +1054,7 @@ static void drawCarBody(const Car *c,int lod)
 {
     const CarDef *d=&carDefs[c->model];
     int C=(int)(c->cs*4096.0f), S=(int)(c->sn*4096.0f);
+    bodyRoll=(int)(c->sr*4096.0f); bodyPitch=(int)(c->sp*4096.0f); bodyHeave=(int)(c->sy*(4096.0f/CAR_SCALE));
     int n=d->nst, i, j, sd, k;
     int P[MAXST][3][2][3];
     int tr,tg,tb,f100;
@@ -1008,6 +1116,7 @@ static void drawWheels(const Car *c,int pass)
     const CarDef *d=&carDefs[c->model];
     int C=(int)(c->cs*4096.0f), S=(int)(c->sn*4096.0f);
     int sA=(int)(c->steer*0.4f*4096.0f), cA=4096-((sA*sA)>>13);
+    bodyRoll=bodyPitch=bodyHeave=0;                      /* wheels stay on the ground, only the body moves on its springs */
     int ax, s, k, q, e, ww=d->ww;
     glPushMatrix();
     mtxT(floattof32(c->x),0,floattof32(c->z));
@@ -1923,7 +2032,7 @@ static void hudGameB(void)
     int hp=(int)p->hp, nt=(int)p->nitro;
     u16 hc=hp>50?COL_GREEN:(hp>25?COL_YEL:COL_RED);
     htextS(134,28,"SPEED",COL_GRAY,1);
-    siprintf(b,"%d",(int)(fabsf(p->spd)*4.0f));
+    siprintf(b,"%d",(int)(fabsf(p->spd)*SPD_KMH));
     htextS(134,38,b,COL_WHITE,3);
     htextS(208,52,"KM/H",COL_GRAY,1);
     htextS(134,64,"HEALTH",COL_GRAY,1);
@@ -1943,7 +2052,7 @@ static void hudGameB(void)
         htextC(128,148,b,COL_YEL,4);
     } else if(state==ST_PLAY){
         if(frameNo<90) htextC(128,148,"GO!",COL_GREEN,4);
-        else htextC(128,182,"A GAS B BRAKE Y NITRO L DRIFT",COL_GRAY,1);
+        else htextC(128,182,"A GAS B BRAKE Y NITRO L HANDBRAKE",COL_GRAY,1);
     } else if(state==ST_END){
         htextC(128,146,endMsg1,COL_YEL,2);
         htextC(128,166,endMsg2,COL_WHITE,1);

@@ -68,10 +68,10 @@ jobs:
           test -s proj/source/music_data.c
 
           echo "=== BUILD ARM9 ==="
-          make -C proj TARGET=rumble-forest-ds clean
-          make -C proj TARGET=rumble-forest-ds
+          make -C proj TARGET=Flatout-DS clean
+          make -C proj TARGET=Flatout-DS
 
-          ARM9_ELF="proj/rumble-forest-ds.elf"
+          ARM9_ELF="proj/Flatout-DS.elf"
           test -s "$ARM9_ELF"
 
           echo "=== LOCATE ARM7 ==="
@@ -125,19 +125,19 @@ jobs:
           echo "NDSTOOL: $NDSTOOL"
 
           echo "=== CREATE NDS ROM ==="
-          "$NDSTOOL" -c proj/rumble-forest-ds.nds \
+          "$NDSTOOL" -c proj/Flatout-DS.nds \
             -9 "$ARM9_ELF" \
             -7 "$ARM7_ELF" \
             -b proj/icon.bmp \
-            "RumbleForest;Homebrew;devkitPro"
+            "Flatout DS;Homebrew;devkitPro"
 
           echo "=== VERIFY ROM ==="
-          ls -lh proj/rumble-forest-ds.nds
-          test -s proj/rumble-forest-ds.nds
+          ls -lh proj/Flatout-DS.nds
+          test -s proj/Flatout-DS.nds
 
       - name: Upload NDS artifact
         uses: actions/upload-artifact@v4
         with:
-          name: rumble-forest-ds
-          path: proj/rumble-forest-ds.nds
+          name: Flatout-DS
+          path: proj/Flatout-DS.nds
           if-no-files-found: error

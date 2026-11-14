@@ -1,4 +1,4 @@
-RUMBLE FOREST DS - a game for the ORIGINAL Nintendo DS (not DSi) in the spirit of Flatout 2
+Flatout DS
 =  In GARAGE - car selection with scales: TOP SPEED, ACCELERATION,
 HANDLING, STRENGTH, WEIGHT, NITRO, class (DERBY/RACE) and drive.
 In OPTIONS - AI level, number of laps, sound.

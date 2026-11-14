@@ -23,15 +23,6 @@ B or Down brake/back Y or R nitro (charged from impacts)
 L handbrake (drift) X turn on the track (rally)
 START or touch "MENU" - exit menu
 
-HOW TO ASSEMBLE .nds
-Option A (PC): install devkitPro (devkitARM + libnds), take the ARM9 template from
-examples/nds/templates, put source/main.c, source/textures.h and source/cars.h in its
-source/, in the devkitPro terminal run make.
- Option B (phone, GitHub): create a repository, upload main.c,
-textures.h and cars.h (to the root), and put the github_workflow/build.yml file (your working script + cars.h) as
-.github/workflows/build.yml. Next, the Actions tab -> Build NDS -> Run workflow;
-the finished .nds will be in Artifacts.
-
 If the linker complains about sinf/cosf/atan2f: in the Makefile LIBS := -lnds9 -lm
 
 IF A COMPILATION ERROR OCCURS

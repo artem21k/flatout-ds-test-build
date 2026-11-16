@@ -82,36 +82,24 @@ jobs:
           test -s "$ARM7_ELF"
           echo "ARM7: $ARM7_ELF"
 
-          echo "=== CREATE 32x32 ICON ==="
+          echo "=== CREATE 32x32 ICON (Flatout DS) ==="
           python3 - <<'PY'
-          import struct
-
-          width, height = 32, 32
-          palette = [
-              (0, 0, 0), (0, 0, 180), (0, 100, 255),
-              (0, 180, 255), (0, 255, 0), (0, 180, 0),
-              (255, 255, 0), (255, 180, 0), (255, 0, 0),
-              (180, 0, 0), (255, 255, 255), (180, 180, 180),
-              (100, 100, 100), (60, 60, 60), (255, 0, 255),
-              (0, 255, 255)
-          ]
-
-          pixels = bytearray()
-          for y in range(height - 1, -1, -1):
-              for x in range(0, width, 2):
-                  def color(px, py):
-                      if 5 <= px < 27 and 5 <= py < 27:
-                          return 3 if (px + py) % 4 < 2 else 2
-                      return 1
-                  pixels.append((color(x, y) << 4) | color(x + 1, y))
-
-          palette_data = b''.join(struct.pack('<BBBB', b, g, r, 0) for r, g, b in palette)
-          offset = 14 + 40 + len(palette_data)
-          file_header = struct.pack('<2sIHHI', b'BM', offset + len(pixels), 0, 0, offset)
-          dib_header = struct.pack('<IiiHHIIiiII', 40, width, height, 1, 4, 0, len(pixels), 2835, 2835, 16, 16)
-
-          with open('proj/icon.bmp', 'wb') as f:
-              f.write(file_header + dib_header + palette_data + pixels)
+          import base64
+          ICON = (
+              "Qk12AgAAAAAAAHYAAAAoAAAAIAAAACAAAAABAAQAAAAAAAACAAATCwAAEwsAABAAAAAQAAAA/wD/"
+              "AP///wDK//8AiuL/ANPu8ADX270AZKveABVv7gCGi3QAUVdUAAAb/gAOGYUAFhYiABYUAAAPAAAA"
+              "AAAAAAAMEAAAAAAAAAAAAAAAAABeyd7+8AAAAAAAAAAAAAAAGcvZiJmdmd3sEAAAAAAAABaqvIlJ"
+              "/MmIWf+ZiP/wAABTqqyNVqqru/Qbz/yF2d3hgne9iIaqcTq5Gqqqx6qqqwF3fP+Cp7gqrxqnOqtn"
+              "qnsFZ3d/knd9N38XfGqoE2psCDqnNpR3fEd/VnxnpFlcPAFqq5WEZ3xHbGZ7N3Jnf2sBaqe1VTp8"
+              "U3c3dzdzZ3d8AVOqv/kqfIJ3Z6czeWqqPACBZ3evOqv3evensn8aqR8AGBQzSIJneqq2erqsFrtf"
+              "AAz/2RgRhhEjNRZne5Ks/wAP/4gtEVEY34EVURhRIisAH/xjNRj/if8R+JiWmBYwAP/5YYGf/4yI"
+              "Ffn81gAAAAD/+WGF/ImYgR/5ycgQAAAA//kymBEZnvFf/PnJEAAAAP/5MogRhRGBX8/o2BAAAAD/"
+              "/DKIHvEVERGf6fQQAAAAj/9iiY/4EYER/8nCEAAAAI//Yx9c8R/////JlAAAAAAM/5YZ+PkZ////"
+              "/0EAAAAAAf/DMpyf////6ckgAAAAAAD/+UIVn/7//pyREAAAAAAAD/+TIhaUWIiZEQAAAAAAAACf"
+              "+TIiOIZoMRAAAAAAAAAAGf/GIzIzEREAAAAAAAAAAAAP/8giIRIAAAAAAAAAAAAAAAAAAAAAAAAA"
+              "AAAA"
+          )
+          open('proj/icon.bmp', 'wb').write(base64.b64decode(ICON))
           PY
 
           test -s proj/icon.bmp

@@ -961,9 +961,9 @@ static void emitCarEffects(Car *c)
 static void updatePlay(u32 held,u32 down)
 {
     int i,j,k;
-    if(state==ST_COUNT||state==ST_PLAY){                      /* SELECT cycles the camera, R (hold) looks behind */
+    if(state==ST_COUNT||state==ST_PLAY){                      /* SELECT cycles the camera, Y (hold) looks behind */
         if(down&KEY_SELECT){ camMode=(camMode+1)%3; camMsgT=90; }
-        lookBack=(held&KEY_R)!=0;
+        lookBack=(held&KEY_Y)!=0;
     } else lookBack=0;
     if(camMsgT>0) camMsgT--;
     for(k=0;k<ncars;k++){
@@ -985,7 +985,7 @@ static void updatePlay(u32 held,u32 down)
                 thr=(held&(KEY_A|KEY_UP))?1.0f:0.0f;
                 if(held&(KEY_B|KEY_DOWN)) thr=-1.0f;
                 str=(held&KEY_RIGHT)?1.0f:((held&KEY_LEFT)?-1.0f:0.0f);
-                nit=(held&KEY_Y)!=0;
+                nit=(held&KEY_R)!=0;
                 hb=(held&KEY_L)!=0;
                 if((down&KEY_X)&&gmode==GM_RACE) placeOnTrack(c,c->idx,0.0f);
             }
@@ -2424,7 +2424,6 @@ static void hudGameB(void)
         htextC(128,148,b,COL_YEL,4);
     } else if(state==ST_PLAY){
         if(frameNo<90) htextC(128,148,"GO!",COL_GREEN,4);
-        else { htextC(128,172,"SELECT CAMERA   R LOOK BACK",COL_GRAY,1); htextC(128,182,"A GAS B BRAKE Y NITRO L HANDBRAKE",COL_GRAY,1); }
         if(camMsgT>0) htextC(128,148,camMode==0?"CAMERA: CHASE":(camMode==1?"CAMERA: HOOD":"CAMERA: BUMPER"),COL_YEL,1);
     } else if(state==ST_END){
         htextC(128,146,endMsg1,COL_YEL,2);

@@ -1284,7 +1284,7 @@ static void bodyQuads(const Car *c,const CarDef *d,int (*P)[NRING][2][3],int C,i
                     if(!ov){ if(tgl) glColor3b(tr*82/100,tg*82/100,tb*82/100); else if(bed) glColor3b(tr*50/100,tg*50/100,tb*50/100); else glColor3b(tr,tg,tb); }
                 }
                 if(side){
-                    #define SU(p) (sd?UVU(0,(p)[2]):(1536-UVU(0,(p)[2])))
+                    #define SU(p) ((sd||d->noMirror)?UVU(0,(p)[2]):(1536-UVU(0,(p)[2])))
                     #define SV(p) UVV(0,(p)[1])
                     VX(p0,SU(p0),SV(p0)); VX(p1,SU(p1),SV(p1)); VX(p2,SU(p2),SV(p2)); VX(p3,SU(p3),SV(p3));
                     #undef SU

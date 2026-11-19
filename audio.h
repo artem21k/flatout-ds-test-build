@@ -43,11 +43,14 @@ static void sndAllStop(void){ sndGameStop(); musStop(); }
 static int sfxPlay(int id,int vol,int pan,int pitchPct)
 {
     const SndDef *d=&sndDefs[id];
-    if(!sndOn) return -1;
+    if(!sndOn||sfxVol<=0) return -1;
     if(vol<0) vol=0;
     if(vol>127) vol=127;
     if(pan<0) pan=0;
     if(pan>127) pan=127;
+    vol=vol*sfxVol/10;                                          /* SFX slider */
+    if(chMode==1) pan=64;                                       /* mono: everything in the centre */
+    else if(chMode==2) pan=64+(pan-64)*6/10;                    /* headphones: softer left / right separation */
     return soundPlaySample(d->data,SoundFormat_8Bit,(u32)d->len,(u16)(d->rate*pitchPct/100),(u8)vol,(u8)pan,d->loop!=0,0);
 }
 
@@ -77,7 +80,7 @@ static void sndEngine(const Car *p,int on,int gas)
     engRpm+=(target-engRpm)*0.15f;
     if((frameNo&1)==0){
         soundSetFreq(engineCh,(int)((float)sndDefs[id].rate*(0.85f+1.4f*clampf(engRpm,0.0f,1.3f))));   /* 0.85x idle .. 2.7x max (< 32 kHz) */
-        soundSetVolume(engineCh,(int)((float)ENG_VOL_IDLE+(float)(ENG_VOL_MAX-ENG_VOL_IDLE)*clampf(engRpm,0.0f,1.0f)));
+        soundSetVolume(engineCh,(int)((float)ENG_VOL_IDLE+(float)(ENG_VOL_MAX-ENG_VOL_IDLE)*clampf(engRpm,0.0f,1.0f))*sfxVol/10);
     }
 }
 
@@ -149,7 +152,7 @@ static void sndDrive(const Car *p,int active)
         if(want>=0) rollCh=sfxPlay(want,0,64,100);
     }
     if(rollCh>=0 && (frameNo%3)==0){
-        soundSetVolume(rollCh,(int)clampf(spd*4.5f,0.0f,100.0f));
+        soundSetVolume(rollCh,(int)clampf(spd*4.5f,0.0f,100.0f)*sfxVol/10);
         soundSetFreq(rollCh,(int)((float)sndDefs[rollSfx].rate*(0.75f+0.5f*clampf(spd/MAXSPD,0.0f,1.4f))));
     }
 
@@ -158,7 +161,7 @@ static void sndDrive(const Car *p,int active)
     if(skidCh<0 && spd>6.0f && slip>4.0f) skidCh=sfxPlay(SFX_ASPHALT_SKID_2,0,64,100);
     if(skidCh>=0){
         if(spd<4.0f || slip<2.0f) sndLoopStop(&skidCh);
-        else if((frameNo%3)==0) soundSetVolume(skidCh,(int)clampf(slip*9.0f,0.0f,85.0f));
+        else if((frameNo%3)==0) soundSetVolume(skidCh,(int)clampf(slip*9.0f,0.0f,85.0f)*sfxVol/10);
     }
 
     /* nitro: one-shot blast + loop while it burns */
@@ -194,7 +197,8 @@ static void sndTick(void)
 #define MUS_RATE   16000
 #define MUS_RING   32768                 /* samples in the ring buffer, power of two (64 KB) */
 #define MUS_AHEAD  (MUS_RING/2)          /* decode this far ahead of the playhead            */
-#define MUS_VOL    64                    /* music volume 0..127 (sfx are louder)             */
+#define MUS_VOL    64                    /* (old fixed music volume)                          */
+#define MUSV       (127*musVol/10)       /* music volume 0..127 from the MUSIC slider (5 = old default) */
 #define MUS_RACE_TRACKS 4
 
 #ifndef SOUND_FREQ
@@ -289,7 +293,7 @@ static void musStartFile(int info)
     memset(musRing,0,sizeof(musRing));
     musDecode(MUS_AHEAD);
     DC_FlushRange(musRing,sizeof(musRing));
-    musCh=soundPlaySample(musRing,SoundFormat_16Bit,sizeof(musRing),MUS_RATE,MUS_VOL,64,true,0);
+    musCh=soundPlaySample(musRing,SoundFormat_16Bit,sizeof(musRing),MUS_RATE,MUSV,64,true,0);
     if(musCh<0){ musStop(); return; }
     period=0x10000-(SOUND_FREQ(MUS_RATE)&0xFFFF);                  /* ARM7 sound ticks per sample           */
     TIMER_CR(2)=0; TIMER_CR(3)=0;
@@ -299,13 +303,21 @@ static void musStartFile(int info)
     banShow(musInfoA[info],musInfoT[info]);                       /* slide the track name in */
 }
 
-static void musPlayMenu(void){ if(!sndOn||!musFsOk) return; musIsMenu=1; musStartFile(0); }
+static void musPlayMenu(void){ if(!sndOn||!musFsOk||musVol<=0) return; musIsMenu=1; musStartFile(0); }
 static void musMenu(void){ if(musCh>=0 && musIsMenu) return; musPlayMenu(); }   /* keep the theme running if it already plays */
 static void musPlayRace(void)
 {
-    if(!sndOn||!musFsOk) return;
+    if(!sndOn||!musFsOk||musVol<=0) return;
     musIsMenu=0; musRaceNext=(int)((musSeed*2654435761u)>>30)%MUS_RACE_TRACKS;
     musStartFile(musRaceNext+1);
+}
+
+/* the MUSIC slider moved: 0 stops the stream, anything else sets the volume (or starts the menu theme again) */
+static void musApply(void)
+{
+    if(musVol<=0){ musStop(); return; }
+    if(musCh>=0) soundSetVolume(musCh,MUSV);
+    else if(state==ST_MENU) musPlayMenu();
 }
 
 static void musUpdate(void)
@@ -313,7 +325,7 @@ static void musUpdate(void)
     u16 c; u32 target, from;
     musSeed++;
     if(musCh<0) return;
-    if(!sndOn){ musStop(); return; }
+    if(!sndOn||musVol<=0){ musStop(); return; }
     c=TIMER_DATA(3); musPlay+=(u16)(c-musLastCnt); musLastCnt=c;
     if(musEnding && (s32)(musPlay-musEndAbs)>=0){            /* track finished: next one (menu: same one again) */
         if(musIsMenu) musPlayMenu();
@@ -330,6 +342,7 @@ static void musUpdate(void)
 }
 #else
 static void sndInit(void){}
+static void musApply(void){}
 static void sndEngineStop(void){}
 static void sndAllStop(void){}
 static void sndEngine(const Car *p,int on,int gas){ (void)p;(void)on;(void)gas; }

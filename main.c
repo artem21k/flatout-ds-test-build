@@ -166,6 +166,9 @@ static Part  parts[MAXPART];
 static int   partNext;
 static int   menuScr, mainSel, modeSel, mapSel, carSel=4, optSel, lastMap=2;
 static int   lapsN=3, sndOn=1;
+static int   sfxVol=10, musVol=5, chMode=0;                  /* sliders 0..10, channels: 0 stereo, 1 mono, 2 headphones */
+static int   ctlPreset=0, optTab=1, sliderDrag=-1;           /* control preset 0/1, options page 0 game / 1 sound / 2 controls */
+static int   gTouchHeld=0, gTx=0, gTy=0;                     /* touch screen state every frame (for dragging sliders) */
 static float trackTotal;
 enum { SC_MAIN, SC_MAPS, SC_CAR, SC_OPT };
 
@@ -982,11 +985,11 @@ static void updatePlay(u32 held,u32 down)
         }
         if(c->isPlayer && !AUTOPILOT){
             if(state==ST_PLAY){
-                thr=(held&(KEY_A|KEY_UP))?1.0f:0.0f;
-                if(held&(KEY_B|KEY_DOWN)) thr=-1.0f;
+                thr=(held&((ctlPreset?KEY_R:KEY_A)|KEY_UP))?1.0f:0.0f;
+                if(held&((ctlPreset?KEY_L:KEY_B)|KEY_DOWN)) thr=-1.0f;
                 str=(held&KEY_RIGHT)?1.0f:((held&KEY_LEFT)?-1.0f:0.0f);
-                nit=(held&KEY_R)!=0;
-                hb=(held&KEY_L)!=0;
+                nit=(held&(ctlPreset?KEY_A:KEY_R))!=0;
+                hb=(held&(ctlPreset?KEY_B:KEY_L))!=0;
                 if((down&KEY_X)&&gmode==GM_RACE) placeOnTrack(c,c->idx,0.0f);
             }
         } else {
@@ -2130,6 +2133,12 @@ static void hIcon(int kind,int cx,int cy,u16 c,u16 hole)
         hrect(cx-9,cy-1,19,3,c); hrect(cx-1,cy,3,10,c); hdisc(cx,cy,4,c);
     } else if(kind==5){                            /* open door */
         hrect(cx-9,cy-11,18,22,c); hrect(cx-6,cy-8,12,16,C15(255,214,70)); hrect(cx-6,cy-8,5,16,c); hrect(cx+2,cy,3,3,c);
+    } else if(kind==7){                            /* Nintendo DS: two screens, d-pad and buttons */
+        u16 sc=C15(255,214,70);
+        hrect(cx-11,cy-13,22,12,c); hrect(cx-8,cy-11,16,8,sc);
+        hrect(cx-11,cy,22,13,c);    hrect(cx-5,cy+2,10,8,sc);
+        hrect(cx-10,cy+6,4,1,sc); hrect(cx-9,cy+4,1,5,sc);
+        hrect(cx+6,cy+4,2,2,sc); hrect(cx+8,cy+6,2,2,sc); hrect(cx+6,cy+8,2,2,sc);
     } else if(kind==9){                            /* (old crash burst, unused) */
         static const int sx[8]={0,8,12,8,0,-8,-12,-8}, sy[8]={-12,-8,0,8,12,8,0,-8};
         hdisc(cx,cy,6,c);
@@ -2338,23 +2347,64 @@ static void hudCar(void)
     hFooter("START","BACK",'B');
 }
 
+static const char *optTabName[3]={"GAME OPTIONS","SOUND OPTIONS","CONTROLS"};
+static const int   optTabIcon[3]={0,4,7};                         /* flag, loudspeaker, Nintendo DS */
+static const char *chName[3]={"STEREO","MONO","HEADPHONES"};
+static const char *ctlTxt[2][4]={{"HANDBRAKE","NITRO","GAS","BRAKE/REV"},{"BRAKE/REV","GAS","NITRO","HANDBRAKE"}};   /* L, R, A, B per preset */
+
+static void hOptRow(int y,int sel,const char *label)
+{
+    hrect(8,y,240,22,sel?C15(220,128,18):C15(34,27,15));
+    hframe(8,y,240,22,sel?COL_WHITE:C15(120,84,14));
+    htextEx(16,y+7,label,sel?COL_DARK:COL_CREAM,1,1);
+}
+static void hOptValue(int y,int sel,const char *v){ htextEx(242-htextW(v,1),y+7,v,sel?COL_DARK:COL_YEL,1,1); }
+static void hOptSlider(int y,int sel,const char *label,int v)       /* v = 0..10 */
+{
+    char b[8]; int f=v*78/10;
+    hOptRow(y,sel,label);
+    hrect(122,y+6,80,10,sel?C15(150,84,10):C15(12,9,4));
+    hrect(123,y+7,f,8,sel?COL_WHITE:COL_YEL);
+    hframe(122,y+6,80,10,sel?COL_DARK:COL_EDGE);
+    siprintf(b,"%d%%",v*10);
+    hOptValue(y,sel,b);
+}
+static void hudOptControls(void)                                   /* button map of the chosen preset */
+{
+    const char **t=ctlTxt[ctlPreset];
+    hrect(4,30,248,86,C15(24,19,10)); hframe(4,30,248,86,C15(120,84,14)); hrect(125,34,1,78,C15(120,84,14));
+    hHint(9,36,'L',t[0]); hHint(9,52,'R',t[1]); hHint(9,68,'A',t[2]); hHint(9,84,'B',t[3]);
+    htextS(9,100,"TOUCH",COL_YEL,1); htextS(57,100,"MENU",COL_WHITE,1);
+    hHint(132,36,'Y',"LOOK BACK"); hHint(132,52,'X',"RESET CAR");
+    htextS(132,68,"D-PAD",COL_YEL,1);  htextS(180,68,"STEER",COL_WHITE,1);
+    htextS(132,84,"SELECT",COL_YEL,1); htextS(188,84,"CAMERA",COL_WHITE,1);
+    htextS(132,100,"START",COL_YEL,1); htextS(180,100,"PAUSE",COL_WHITE,1);
+}
+
 static void hudOpt(void)
 {
-    static const char *lab[3]={"AI LEVEL","RALLY LAPS","SOUND"};
-    int i; char b[32];
+    int i,w; char b[32];
     hcopy(menuBg,0,HUDH);
     hHeader("OPTIONS");
-    for(i=0;i<3;i++){
-        int y=40+i*30, sel=(i==optSel);
-        hrect(14,y,228,24,sel?C15(220,128,18):C15(34,27,15));
-        hframe(14,y,228,24,sel?COL_WHITE:C15(120,84,14));
-        if(i==0) siprintf(b,"<  %s  >",diffName[diff]);
-        else if(i==1) siprintf(b,"<  %d  >",lapsN);
-        else siprintf(b,"<  %s  >",sndOn?"ON":"OFF");
-        htextEx(24,y+8,lab[i],sel?COL_DARK:COL_CREAM,1,1);
-        htextEx(232-htextW(b,1),y+8,b,sel?COL_DARK:COL_YEL,1,1);
+    if(optTab==0){
+        hOptRow(34,optSel==0,"AI LEVEL");    siprintf(b,"<  %s  >",diffName[diff]); hOptValue(34,optSel==0,b);
+        hOptRow(60,optSel==1,"RALLY LAPS");  siprintf(b,"<  %d  >",lapsN);          hOptValue(60,optSel==1,b);
+    } else if(optTab==1){
+        hOptSlider(34,optSel==0,"SFX VOLUME",sfxVol);
+        hOptSlider(60,optSel==1,"MUSIC VOLUME",musVol);
+        hOptRow(86,optSel==2,"CHANNELS");    siprintf(b,"<  %s  >",chName[chMode]); hOptValue(86,optSel==2,b);
+    } else {
+        hudOptControls();
     }
-    hFooter("CHANGE","BACK",'B');
+    for(i=0;i<3;i++) hButton(61+i*50,122,i==optTab,optTabIcon[i]);
+    hHint(24,135,'L',""); hHint(216,135,'R',"");
+    hrect(0,158,256,11,C15(20,15,8));                               /* caption strip */
+    hline(0,158,255,158,C15(120,80,10)); hline(0,168,255,168,C15(120,80,10));
+    if(optTab==2) siprintf(b,"PRESET %d",ctlPreset+1); else siprintf(b,"%s",optTabName[optTab]);
+    w=htextW(b,1);
+    htextC(128,160,b,COL_WHITE,1);
+    htri(128-w/2-9,160,-1,COL_YEL); htri(128+w/2+4,160,1,COL_YEL);
+    hFooter("NEXT PAGE","BACK",'B');
 }
 
 /* ============================== IN-GAME HUD ================================ */
@@ -2492,11 +2542,26 @@ static int previewMap(void)
     if(menuScr==SC_MAPS) return modeSel==0?2+mapSel:mapSel;
     return lastMap;
 }
+static int optClamp(int v){ return v<0?0:(v>10?10:v); }
 static void optChange(int dir)
 {
-    if(optSel==0) diff=(diff+dir+3)%3;
-    else if(optSel==1) lapsN=(dir>0)?(lapsN<3?3:(lapsN<5?5:2)):(lapsN>3?3:(lapsN>2?2:5));
-    else { sndOn^=1; if(!sndOn) sndAllStop(); else musPlayMenu(); }
+    if(optTab==0){
+        if(optSel==0) diff=(diff+dir+3)%3;
+        else lapsN=(dir>0)?(lapsN<3?3:(lapsN<5?5:2)):(lapsN>3?3:(lapsN>2?2:5));
+    } else if(optTab==1){
+        if(optSel==0) sfxVol=optClamp(sfxVol+dir);
+        else if(optSel==1){ musVol=optClamp(musVol+dir); musApply(); }
+        else chMode=(chMode+dir+3)%3;
+    } else ctlPreset^=1;
+    sndUi(0);
+    hudTimer=0;
+}
+static void optSlider(int which,int tx)                            /* tap / drag on a slider bar */
+{
+    int v=optClamp(((tx-123)*10+39)/78), *p=(which==0)?&sfxVol:&musVol;
+    if(*p==v) return;
+    *p=v;
+    if(which==1) musApply();
     sndUi(0);
     hudTimer=0;
 }
@@ -2511,6 +2576,8 @@ static void menuOk(void)
         menuScr=SC_CAR;
     } else if(menuScr==SC_CAR){
         startGame(lastMap);
+    } else if(menuScr==SC_OPT){
+        optTab=(optTab+1)%3; optSel=0;                        /* A = next options page */
     }
     hudTimer=0;
 }
@@ -2537,8 +2604,20 @@ static void menuTouch(int tx,int ty)
             if(tx<90){ carSel=(carSel+NCARDEF-1)%NCARDEF; sndUi(0); hudTimer=0; }
             else if(tx>=166){ carSel=(carSel+1)%NCARDEF; sndUi(0); hudTimer=0; }
         }
-    } else {
-        for(i=0;i<3;i++) if(ty>=40+i*30&&ty<64+i*30){ optSel=i; optChange(tx<128?-1:1); }
+    } else {                                                         /* options */
+        if(ty>=118&&ty<158){
+            for(i=0;i<3;i++) if(tx>=58+i*50&&tx<98+i*50){ optTab=i; optSel=0; sndUi(0); hudTimer=0; }
+        } else if(ty>=158){
+            if(optTab==2){ ctlPreset^=1; sndUi(0); hudTimer=0; }
+        } else if(optTab==0){
+            for(i=0;i<2;i++) if(ty>=34+i*26&&ty<56+i*26){ optSel=i; optChange(tx<128?-1:1); }
+        } else if(optTab==1){
+            for(i=0;i<3;i++) if(ty>=34+i*26&&ty<56+i*26){
+                optSel=i;
+                if(i<2 && tx>=112 && tx<=208){ sliderDrag=i; optSlider(i,tx); }
+                else optChange(tx<128?-1:1);
+            }
+        } else if(ty>=30&&ty<116){ ctlPreset^=1; sndUi(0); hudTimer=0; }
     }
 }
 
@@ -2555,11 +2634,17 @@ static void menuInput(u32 down,int touched,int tx,int ty)
     } else if(menuScr==SC_CAR){
         if(left)  carSel=(carSel+NCARDEF-1)%NCARDEF;
         if(right) carSel=(carSel+1)%NCARDEF;
-    } else {
-        if(up) optSel=(optSel+2)%3;
-        if(dn) optSel=(optSel+1)%3;
+    } else {                                                         /* options: L / R = page, up / down = row, left / right = value */
+        int rows=(optTab==0)?2:((optTab==1)?3:0);
+        if(down&KEY_L){ optTab=(optTab+2)%3; optSel=0; sndUi(0); hudTimer=0; }
+        if(down&KEY_R){ optTab=(optTab+1)%3; optSel=0; sndUi(0); hudTimer=0; }
+        if(rows){
+            if(up) optSel=(optSel+rows-1)%rows;
+            if(dn) optSel=(optSel+1)%rows;
+        }
         if(left)  optChange(-1);
         if(right) optChange(1);
+        if(sliderDrag>=0){ if(gTouchHeld) optSlider(sliderDrag,gTx); else sliderDrag=-1; }
     }
     if(left||right||up||dn){ hudTimer=0; if(menuScr!=SC_OPT) sndUi(0); }   /* options screen clicks inside optChange */
     if(down&KEY_A) menuOk();
@@ -2711,7 +2796,8 @@ int main(void)
         u32 held, down;
         scanKeys();
         held=keysHeld(); down=keysDown();
-        if(down&KEY_TOUCH) touchRead(&tp);
+        if(held&KEY_TOUCH) touchRead(&tp);
+        gTouchHeld=(held&KEY_TOUCH)!=0; gTx=tp.px; gTy=tp.py;
         gameFrame(held,down,(down&KEY_TOUCH)!=0,tp.px,tp.py);
         glFlush(0);
         swiWaitForVBlank();

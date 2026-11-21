@@ -188,11 +188,10 @@ static void sndTick(void)
     if(gearCool>0)  gearCool--;
 }
 
-/* ================================ MUSIC ==================================== */
-#define MUS_RATE   16000
-#define MUS_RING   32768                 /* samples in the ring buffer, power of two (64 KB) */
-#define MUS_AHEAD  (MUS_RING/2)          /* decode this far ahead of the playhead            */
-#define MUS_FBUF   8192                  /* 8 KB file read buffer                            */
+/* ================================ MUSIC (NitroFS) ========================== */
+#define MUS_RING   32768                 /* 64 KB ring buffer */
+#define MUS_AHEAD  (MUS_RING/2)          /* decode this far ahead of the playhead */
+#define MUS_FBUF   8192                  /* 8 KB file read buffer */
 #define MUSV       (127*musVol/10)
 #define MUS_RACE_TRACKS 4
 
@@ -206,7 +205,7 @@ static const signed char imaIdx[8]={-1,-1,-1,-1,2,4,6,8};
 static s16 musRing[MUS_RING] __attribute__((aligned(32)));
 static unsigned char musFbuf[MUS_FBUF] __attribute__((aligned(4)));
 static FILE *musFp;
-static int musFpos, musFlen;
+static int musFpos, musFlen, musRate = 16000;
 
 static const char *const musPaths[5]={
     "nitro:/music/menu.bin",
@@ -247,9 +246,11 @@ static int musOpen(int idx)
     unsigned char h[16];
     musFp = fopen(musPaths[idx], "rb");
     if(!musFp) return 0;
-    if(fread(h, 1, 16, musFp) != 16 || h[0]!='F' || h[1]!='M' || h[2]!='U' || h[3]!='1' || (h[8]|(h[9]<<8))!=MUS_RATE){
+    if(fread(h, 1, 16, musFp) != 16 || h[0]!='F' || h[1]!='M' || h[2]!='U' || h[3]!='1'){
         fclose(musFp); musFp=NULL; return 0;
     }
+    musRate = h[8] | (h[9] << 8);
+    if(musRate < 8000 || musRate > 48000) musRate = 16000;
     musFpos=0; musFlen=0;
     musLeft=(u32)h[4]|((u32)h[5]<<8)|((u32)h[6]<<16)|((u32)h[7]<<24);
     musPred=(s16)(h[10]|(h[11]<<8)); musIx=h[12]; if(musIx>88) musIx=88;
@@ -316,9 +317,9 @@ static void musStartFile(int info)
     memset(musRing,0,sizeof(musRing));
     musDecode(MUS_AHEAD);
     DC_FlushRange(musRing,sizeof(musRing));
-    musCh=soundPlaySample(musRing,SoundFormat_16Bit,sizeof(musRing),MUS_RATE,MUSV,64,true,0);
+    musCh=soundPlaySample(musRing,SoundFormat_16Bit,sizeof(musRing),musRate,MUSV,64,true,0);
     if(musCh<0){ musStop(); return; }
-    period=0x10000-(SOUND_FREQ(MUS_RATE)&0xFFFF);
+    period=0x10000-(SOUND_FREQ(musRate)&0xFFFF);
     TIMER_CR(2)=0; TIMER_CR(3)=0;
     TIMER_DATA(3)=0; TIMER_DATA(2)=(u16)(0x10000-2*period);
     TIMER_CR(3)=TIMER_ENABLE|TIMER_CASCADE;
@@ -384,3 +385,4 @@ static void sndGameStop(void){}
 static void banUpdate(void){}
 static void banRelease(void){}
 #endif
+

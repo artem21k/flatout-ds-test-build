@@ -16,6 +16,7 @@
    #define USE_RAW_MATRIX_REGS 1   - use MATRIX_TRANSLATE/MATRIX_SCALE registers directly
    ------------------------------------------------------------------------- */
 #include <nds.h>
+#include <filesystem.h>
 #include <stdio.h>
 #include <math.h>
 #include <string.h>

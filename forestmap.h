@@ -16,10 +16,10 @@
    ============================================================================ */
 #include "forestatlas.h"
 
-#define FM_QMAX   2200
-#define FM_FTMAX  900
-#define FM_WBACK  6            /* draw this many road segments behind the camera ... */
-#define FM_WFWD   14           /* ... and this many in front (1 segment is ~4.6 m)   */
+#define FM_QMAX   4600
+#define FM_FTMAX  2600
+#define FM_WBACK  5            /* draw this many road segments behind the camera ... */
+#define FM_WFWD   12           /* ... and this many in front (1 segment is ~4.6 m)   */
 
 enum { FG_ATLAS, FG_GRASS, FG_FLAT, FG_TIRES, FG_N };
 enum { FT_NONE, FT_CONC, FT_ROCKW, FT_ROCKL, FT_FWOOD, FT_FMET, FT_LOGS, FT_HILL, FT_ROCKB };
@@ -73,7 +73,9 @@ static const FZone fmZones[] = {
 #define FM_NZONES (int)(sizeof(fmZones)/sizeof(fmZones[0]))
 
 /* ---------------------------------- geometry helpers --------------------------- */
-static void fmP(float *o,int i,int sd,float off,float y){ o[0]=roadX[i]+nrmX[i]*(float)sd*off; o[1]=y; o[2]=roadZ[i]+nrmZ[i]*(float)sd*off; }
+static float fmVk(float off){ return off<=VERGE0?1.0f:(off>=VERGE1?0.0f:(VERGE1-off)/(VERGE1-VERGE0)); }
+static float fmGH(int i,float off){ return roadH[i]*fmVk(off); }               /* ground height beside road point i */
+static void fmP(float *o,int i,int sd,float off,float y){ o[0]=roadX[i]+nrmX[i]*(float)sd*off; o[1]=y+fmGH(i,off); o[2]=roadZ[i]+nrmZ[i]*(float)sd*off; }
 
 static void fmUV(int tile,int flip,int *u0,int *u1,int *vb,int *vt)
 {
@@ -121,6 +123,15 @@ static void fmFlat(int si,float c[4][3],int r,int g,int b){ fmAdd(FG_FLAT,si,c,0
 
 /* ---------------------------------- barrier / backdrop per segment ------------- */
 static float fmHeightR(int i,float base,float amp){ return base+amp*(float)fmH(i,3)/255.0f; }
+
+static void fmVerge(int i,int sx)       /* grass skirt that joins a raised / lowered road to the flat ground */
+{
+    int j=(i+1)%npts, sd=sx?1:-1, g0=(int)(fmAcc[i]*128.0f)%1024, g1=g0+(int)((fmAcc[i+1]-fmAcc[i])*128.0f);
+    float c[4][3];
+    if(fabsf(roadH[i])<0.02f && fabsf(roadH[j])<0.02f) return;
+    fmP(c[0],i,sd,VERGE0,0.0f); fmP(c[1],j,sd,VERGE0,0.0f); fmP(c[2],j,sd,VERGE1,0.0f); fmP(c[3],i,sd,VERGE1,0.0f);
+    fmAdd(FG_GRASS,i,c,g0,g1,0,1100,255,255,255);
+}
 
 static void fmSegQuads(int i,int sx,int type)
 {
@@ -202,10 +213,10 @@ static void fmFace(int g,int i,int sd,float off,float fo,float w,float y0,float 
 {
     float c[4][3], p[3], fx=nrmZ[i], fz=-nrmX[i], nx=nrmX[i], nz=nrmZ[i]; int u0=0,u1=64,vb=64,vt=0;
     fmP(p,i,sd,off,0.0f); p[0]+=fx*fo; p[2]+=fz*fo;
-    c[0][0]=p[0]-nx*w; c[0][1]=y0; c[0][2]=p[2]-nz*w;
-    c[1][0]=p[0]+nx*w; c[1][1]=y0; c[1][2]=p[2]+nz*w;
-    c[2][0]=p[0]+nx*w; c[2][1]=y1; c[2][2]=p[2]+nz*w;
-    c[3][0]=p[0]-nx*w; c[3][1]=y1; c[3][2]=p[2]-nz*w;
+    c[0][0]=p[0]-nx*w; c[0][1]=y0+p[1]; c[0][2]=p[2]-nz*w;
+    c[1][0]=p[0]+nx*w; c[1][1]=y0+p[1]; c[1][2]=p[2]+nz*w;
+    c[2][0]=p[0]+nx*w; c[2][1]=y1+p[1]; c[2][2]=p[2]+nz*w;
+    c[3][0]=p[0]-nx*w; c[3][1]=y1+p[1]; c[3][2]=p[2]-nz*w;
     if(g==FG_ATLAS) fmUV(tile,flip,&u0,&u1,&vb,&vt);
     else if(g==FG_TIRES){ u0=0; u1=512; vb=512; vt=0; }
     fmAdd(g,i,c,u0,u1,vb,vt,r,gg,b);
@@ -227,7 +238,7 @@ static void fmSign(int i,int sd,float off,int tile,int flip,float w,float y0,flo
 static void fmBox(int g,int i,float fo,float no,float a,float b,float y0,float y1,int mask,int tile,int r,int gg,int bb)
 {
     float fx=nrmZ[i], fz=-nrmX[i], nx=nrmX[i], nz=nrmZ[i];
-    float cx=roadX[i]+fx*fo+nx*no, cz=roadZ[i]+fz*fo+nz*no, c[4][3];
+    float cx=roadX[i]+fx*fo+nx*no, cz=roadZ[i]+fz*fo+nz*no, c[4][3], gb=fmGH(i,fabsf(no));
     static const signed char F[6][4][3]={            /* sf,sn,level(0=y0,1=y1) in u/v order BL,BR,TR,TL */
         {{ 1,-1,0},{ 1, 1,0},{ 1, 1,1},{ 1,-1,1}},    /* front  */
         {{-1, 1,0},{-1,-1,0},{-1,-1,1},{-1, 1,1}},    /* back   */
@@ -245,7 +256,7 @@ static void fmBox(int g,int i,float fo,float no,float a,float b,float y0,float y
         for(k=0;k<4;k++){
             c[k][0]=cx+fx*a*(float)F[f][k][0]+nx*b*(float)F[f][k][1];
             c[k][2]=cz+fz*a*(float)F[f][k][0]+nz*b*(float)F[f][k][1];
-            c[k][1]=F[f][k][2]?y1:y0;
+            c[k][1]=(F[f][k][2]?y1:y0)+gb;
         }
         fmAdd(g,i,c,u0,u1,vb,vt,r*shade[f]/255,gg*shade[f]/255,bb*shade[f]/255);
     }
@@ -275,10 +286,10 @@ static void fmPlank(int i,int sd,float off,float ang,float len)
     float p[3], c[4][3], fx=nrmZ[i], fz=-nrmX[i], nx=nrmX[i], nz=nrmZ[i], ca=cosf(ang), sa=sinf(ang);
     float dx=fx*ca+nx*sa, dz=fz*ca+nz*sa, ex=-fx*sa+nx*ca, ez=-fz*sa+nz*ca; int u0,u1,vb,vt;
     fmP(p,i,sd,off,0.05f);
-    c[0][0]=p[0]-dx*len-ex*0.15f; c[0][1]=0.05f; c[0][2]=p[2]-dz*len-ez*0.15f;
-    c[1][0]=p[0]+dx*len-ex*0.15f; c[1][1]=0.05f; c[1][2]=p[2]+dz*len-ez*0.15f;
-    c[2][0]=p[0]+dx*len+ex*0.15f; c[2][1]=0.05f; c[2][2]=p[2]+dz*len+ez*0.15f;
-    c[3][0]=p[0]-dx*len+ex*0.15f; c[3][1]=0.05f; c[3][2]=p[2]-dz*len+ez*0.15f;
+    c[0][0]=p[0]-dx*len-ex*0.15f; c[0][1]=p[1]; c[0][2]=p[2]-dz*len-ez*0.15f;
+    c[1][0]=p[0]+dx*len-ex*0.15f; c[1][1]=p[1]; c[1][2]=p[2]+dz*len-ez*0.15f;
+    c[2][0]=p[0]+dx*len+ex*0.15f; c[2][1]=p[1]; c[2][2]=p[2]+dz*len+ez*0.15f;
+    c[3][0]=p[0]-dx*len+ex*0.15f; c[3][1]=p[1]; c[3][2]=p[2]-dz*len+ez*0.15f;
     fmUV(FL_LOG,0,&u0,&u1,&vb,&vt); fmAdd(FG_ATLAS,i,c,u0,u1,vb,vt,255,255,255);
 }
 
@@ -300,7 +311,7 @@ static void fmBuildProps(void)
     fmTower(fmIdx(0.100f),-1,13.0f,1);
     /* ---- first corner (right-hand): chevron signs on the OUTSIDE (left) ---- */
     for(s=0.112f;s<0.150f;s+=0.010f) fmSign(fmIdx(s),-1,9.2f,FL_CHEV,0,0.75f,1.0f,2.5f);
-    fmCones(0.150f,0.190f,-1,7.0f,0.004f);
+    fmCones(0.150f,0.190f,-1,7.0f,0.0023f);
     fmTower(fmIdx(0.170f),-1,14.0f,0);
     /* ---- gorge with the bridge ---- */
     fmBox(FG_ATLAS,fmIdx(0.305f),0.0f,0.0f,2.4f,15.0f,6.8f,7.7f,63,FL_CONC,190,184,172);
@@ -308,22 +319,22 @@ static void fmBuildProps(void)
     for(s=0.396f;s<0.436f;s+=0.010f) fmSign(fmIdx(s),-1,8.6f,FL_CHEV,0,0.7f,0.9f,2.4f);
     fmPlank(fmIdx(0.452f),-1,3.0f,0.3f,1.7f); fmPlank(fmIdx(0.456f),-1,1.0f,-0.5f,1.9f); fmPlank(fmIdx(0.459f),-1,4.2f,1.2f,1.4f);
     /* ---- the S-bump: big LED chevron boards + cones ---- */
-    fmCones(0.470f,0.520f,-1,7.0f,0.004f);
+    fmCones(0.470f,0.520f,-1,7.0f,0.0023f);
     for(s=0.485f;s<0.515f;s+=0.010f) fmFace(FG_ATLAS,fmIdx(s),-1,9.8f,0.0f,1.5f,0.7f,2.5f,FL_LED,0,255,255,255);
     fmSign(fmIdx(0.535f),-1,8.8f,FL_CHEV,0,0.75f,1.0f,2.5f);
     /* ---- rock arch ---- */
     fmBox(FG_ATLAS,fmIdx(0.562f),0.0f,0.0f,4.2f,16.0f,7.4f,12.5f,63,FL_ROCK,214,212,206);
     /* ---- boards + cones after the arch ---- */
-    fmCones(0.600f,0.640f,-1,7.0f,0.004f);
+    fmCones(0.600f,0.640f,-1,7.0f,0.0023f);
     for(s=0.605f;s<0.635f;s+=0.010f) fmFace(FG_ATLAS,fmIdx(s),-1,9.8f,0.0f,1.5f,0.7f,2.5f,FL_LED,0,255,255,255);
     for(s=0.655f;s<0.695f;s+=0.010f) fmSign(fmIdx(s),-1,9.0f,FL_CHEV,0,0.7f,1.0f,2.4f);
     /* ---- left-hand straight up the left edge ---- */
     fmPlank(fmIdx(0.842f),-1,7.8f,1.4f,1.8f); fmPlank(fmIdx(0.845f),-1,6.5f,0.2f,1.6f); fmPlank(fmIdx(0.848f),-1,8.4f,-1.0f,1.5f);
     /* ---- last corner + finishing straight ---- */
     fmTower(fmIdx(0.905f),-1,14.0f,0);
-    fmCones(0.905f,0.962f,-1,7.0f,0.004f);
+    fmCones(0.905f,0.962f,-1,7.0f,0.0023f);
     for(s=0.925f;s<0.955f;s+=0.010f) fmFace(FG_ATLAS,fmIdx(s),-1,9.8f,0.0f,1.5f,0.7f,2.5f,FL_LED,0,255,255,255);
-    fmCones(0.965f,0.996f,-1,7.0f,0.004f);
+    fmCones(0.965f,0.996f,-1,7.0f,0.0023f);
     /* barn (grey siding, dark door facing the road) */
     i=fmIdx(0.972f);
     fmBox(FG_FLAT,i,0.0f,28.0f,8.0f,6.0f,0.0f,4.8f,FM_F|FM_B|FM_L|FM_R,-1,118,128,142);
@@ -350,9 +361,9 @@ static void fmTrees(void)
         float s=(float)i/(float)npts;
         for(sx=0;sx<2;sx++){
             int sd=sx?1:-1, bt=fmBack[sx][i], bar=fmBar[sx][i], cnt;
-            float dens=1.9f, minOff=12.5f, maxOff=36.0f;
-            if(s>0.95f||s<0.03f) dens=0.45f;
-            else if(bar==FT_ROCKW) dens=2.3f;
+            float dens=3.3f, minOff=12.5f, maxOff=36.0f;
+            if(s>0.95f||s<0.03f) dens=0.80f;
+            else if(bar==FT_ROCKW) dens=4.0f;
             if(bar==FT_ROCKW){ minOff=11.5f; maxOff=24.0f; }
             if(bt==FT_HILL){ minOff=14.0f; maxOff=35.0f; }
             if(bt==FT_ROCKB){ minOff=16.5f; maxOff=26.0f; }
@@ -360,7 +371,7 @@ static void fmTrees(void)
             for(k=0;k<cnt && nft<FM_FTMAX;k++){
                 float off=minOff+fmRf()*(maxOff-minOff), jitter=(fmRf()-0.5f)*4.4f;
                 float x=roadX[i]+nrmX[i]*(float)sd*off+nrmZ[i]*jitter, z=roadZ[i]+nrmZ[i]*(float)sd*off-nrmX[i]*jitter;
-                float y=fmBackY(bt,off), lim=off*0.9f; int xi=(int)x, zi=(int)z, ok=1;
+                float y=fmBackY(bt,off)+fmGH(i,off), lim=off*0.9f; int xi=(int)x, zi=(int)z, ok=1;
                 for(j=0;j<npts;j++){
                     int d=(j-i+npts)%npts; int dx,dz; float l2;
                     if(d<14||d>npts-14) continue;
@@ -373,7 +384,7 @@ static void fmTrees(void)
                 ftS[nft]=(short)i; nft++;
             }
             /* a few collidable trees just off the road where nothing solid stands */
-            if(near<110 && fmSolid[sx][i]==0.0f && s>0.04f && s<0.95f && (fmRnd()&255)<85){
+            if(near<170 && fmSolid[sx][i]==0.0f && fabsf(roadH[i])<0.4f && s>0.04f && s<0.95f && (fmRnd()&255)<120){
                 float off=9.6f+fmRf()*3.6f, jitter=(fmRf()-0.5f)*3.0f;
                 float x=roadX[i]+nrmX[i]*(float)sd*off+nrmZ[i]*jitter, z=roadZ[i]+nrmZ[i]*(float)sd*off-nrmX[i]*jitter;
                 int ok=1, xi=(int)x, zi=(int)z; float lim=off*0.85f;
@@ -444,6 +455,7 @@ static void fmBuild(void)
             fmSolid[sx][i]=0.0f; fmHard[sx][i]=0;
             if(a>0.0f){ fmSolid[sx][i]=a; fmHard[sx][i]=(unsigned char)h1; }
             else if(b>0.0f){ fmSolid[sx][i]=b; fmHard[sx][i]=(unsigned char)h2; }
+            fmVerge(i,sx);
             fmSegQuads(i,sx,fmBar[sx][i]);
             fmSegQuads(i,sx,fmBack[sx][i]);
         }
@@ -471,7 +483,7 @@ static void fmDrawTrees(int base)
         for(k=ftGS[i];k<ftGS[i+1];k++){
             const FTree *t=&ft[ftOrd[k]];
             int dx=(t->tx>>12)-camXi, dz=(t->tz>>12)-camZi, x0,z0,ua,ub,tr,tg,tb;
-            if(dx*dx+dz*dz>70*70) continue;
+            if(dx*dx+dz*dz>62*62) continue;
             if(dx*camFxi+dz*camFzi< -384) continue;
             if(t->var==0){ tr=255;tg=255;tb=255; } else if(t->var==1){ tr=228;tg=238;tb=214; } else { tr=255;tg=226;tb=176; }
             x0=(hw*camRxi)>>12; z0=(hw*camRzi)>>12;
@@ -527,6 +539,7 @@ static void fmCollide(Car *c)
         vn=c->vx*nx+c->vz*nz;
         if(vn>0.0f){
             c->vx-=1.3f*vn*nx; c->vz-=1.3f*vn*nz;
+            if(fmHard[sx][i]) tumbleHit(c,nx,nz,vn*1.3f,0.15f);                 /* only solid walls / rock flip a car, a hill just stops it */
             dmg=(vn-4.0f)*(fmHard[sx][i]?0.30f:0.12f);
             if(dmg>0.0f){ hitSrc=SRC_WALL; hitFx(c,dmg,nx,nz); }
         }

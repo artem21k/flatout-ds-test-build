@@ -3095,9 +3095,13 @@ int main(void)
     sndInit();
     bootMsg("5 SOUND OK");
 #if ENABLE_SOUND
+    if(nitroFSInit(NULL)) bootMsg("5.5 NITROFS OK");
+    else                  bootMsg("5.5 NITROFS FAIL");
     musInit();
     bootMsg(musFsOk?"6 MUSIC OK":"6 NO MUSIC DATA");
 #endif
+
+
     state = ST_SPLASH;
     splashT = 300;
 

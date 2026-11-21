@@ -104,8 +104,8 @@ jobs:
             -9 "$ARM9_ELF" \
             -7 "$ARM7_ELF" \
             -b proj/icon.bmp \
-            -d proj/nitrofiles \
-            "Flatout DS;Homebrew;devkitPro"
+            -t "Flatout DS;Homebrew;devkitPro" \
+            -d proj/nitrofiles
 
           echo "=== VERIFY ROM ==="
           ls -lh proj/Flatout-DS.nds

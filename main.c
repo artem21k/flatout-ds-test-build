@@ -35,7 +35,7 @@
 #define DT       (1.0f/60.0f)
 
 #define MAXC     8
-#define MAXCTRL  28
+#define MAXCTRL  48
 #define SUBD     7
 #define MAXPTS   (MAXCTRL*SUBD)
 #define HALFW    6.0f
@@ -115,6 +115,9 @@ typedef struct {
     float aiThr, aiStr, laneOff; int aiNit, hitCool;
     unsigned int gone; int whLost; float zd[4];    /* parts that fell off (DP_*), lost wheels (bit = axle*2+right), damage collected per side: front/rear/left/right */           /* last AI decision (the AI thinks at 30 Hz to save CPU) */
     float sp, spv, sr, srv, sy, syv;         /* suspension (drawing only): pitch, roll, heave + their speeds */
+    float y, vy, gy, gyPrev, vyL;            /* height of the body origin, vertical speed, ground height under the car, ground height last frame, last ground vertical speed */
+    float ar, wr, ap, wp;                    /* real roll / pitch (rad) and their rates: follow the ground, jump, or flip the car over */
+    int   air, airArm, tumb, flipT, gyInit;  /* airborne, frames the ground has been falling away, not on its wheels, frames spent like that, first-frame flag */
     int   mr, mg, mb;           /* minimap colour (r,g,b above = paint tint, 255 = livery as painted) */
 } Car;
 
@@ -131,11 +134,14 @@ typedef struct { float x,y,z,vx,vy,vz,life,max; int type; } Part;
 typedef struct { int n; float p[MAXCTRL][2]; } TrackDef;
 
 static const TrackDef trackDefs[2] = {
-    /* RALLY FOREST: traced from the minimap of the original map (clockwise, point 0 = start line) */
-    { 28, {{-20,-153},{12,-154},{44,-154},{77,-152},{98,-132},{101,-100},{101,-68},
-           {100,-36},{100,-4},{100,28},{100,60},{100,92},{92,122},{63,133},
-           {36,151},{7,141},{1,110},{-19,88},{-48,78},{-76,61},{-94,37},
-           {-97,5},{-101,-27},{-97,-58},{-97,-90},{-97,-123},{-83,-150},{-52,-154}} },
+    /* RALLY FOREST: traced from the minimap of the original map and scaled up (clockwise, point 0 = start line, lap ~1.65 km) */
+    { 44, {{-36,-281},{97,-282},{148,-278},{161,-272},{171,-262},{179,-248},{184,-219},
+           {187,-150},{183,-48},{183,121},{182,201},{176,215},{168,226},{156,234},
+           {131,239},{113,245},{83,269},{67,276},{50,277},{33,274},{20,266},
+           {10,255},{4,242},{2,209},{-1,189},{-8,177},{-19,167},{-34,161},
+           {-63,157},{-79,150},{-111,125},{-146,108},{-162,93},{-171,77},{-174,61},
+           {-175,23},{-186,-25},{-181,-84},{-178,-184},{-176,-243},{-170,-257},{-160,-269},
+           {-147,-277},{-126,-281}} },
     { 18, {{0,-110},{70,-110},{125,-85},{130,-30},{100,10},{60,25},{40,60},{70,100},
            {40,135},{-20,125},{-60,95},{-45,55},{-85,30},{-125,50},{-135,0},{-110,-50},
            {-60,-70},{-40,-105}} }
@@ -175,6 +181,7 @@ static Part  parts[MAXPART];
 static int   partNext;
 static int   menuScr, mainSel, modeSel, mapSel, carSel=4, optSel, lastMap=2;
 static int   lapsN=3, sndOn=1;
+static float camGY=0.0f;                                   /* smoothed height the camera follows */
 static int   botsN=7, testMode=0, setOpen=0, setSel=0;     /* race settings (opened with Y on the track screen) */
 static float maxKmh=0.0f;                                   /* top speed reached this run (shown in TEST DRIVE) */
 #define TESTRUN (gmode==GM_RACE && testMode)
@@ -187,7 +194,9 @@ enum { SC_MAIN, SC_MAPS, SC_CAR, SC_OPT };
 static float roadX[MAXPTS], roadZ[MAXPTS], nrmX[MAXPTS], nrmZ[MAXPTS];
 static float trkH[MAXPTS], limitSp[MAXPTS], limitSp2[MAXPTS], seg2[MAXPTS];
 static int   segV[MAXPTS][12], segTx[MAXPTS], segTz[MAXPTS], segCx[MAXPTS], segCz[MAXPTS];
-static int   segV0[MAXPTS], segV1[MAXPTS];
+static int   segV0[MAXPTS], segV1[MAXPTS], segTy[MAXPTS];
+static float roadH[MAXPTS], roadSl[MAXPTS];   /* height of the road centre line (m) and its slope; only RALLY FOREST has hills and bumps */
+static int   trackHilly;
 static float mapOx, mapOy, mapS;           /* minimap transform */
 
 static int camXi, camZi, camFxi, camFzi;   /* culling info (set in render) */
@@ -377,6 +386,30 @@ static void buildTrack(int which)
     int n=td->n, k,s,i,a;
     float total=0.0f, scale, acc=0.0f, mnx=1e9f,mxx=-1e9f,mnz=1e9f,mxz=-1e9f;
     npts=n*SUBD;
+    trackHilly=(which==0);
+    if(which==0){                       /* RALLY FOREST: spline sampled again at equal distances, so every road segment is the same length */
+        static float tx_[MAXCTRL*16+1], tz_[MAXCTRL*16+1], tc_[MAXCTRL*16+2];
+        int mm=n*16, qq=0; float stp, tgt, fr;
+        i=0;
+        for(k=0;k<n;k++){
+            const float *p0=td->p[(k+n-1)%n], *p1=td->p[k], *p2=td->p[(k+1)%n], *p3=td->p[(k+2)%n];
+            for(s=0;s<16;s++,i++){
+                float t=(float)s/16.0f, t2=t*t, t3=t2*t, q[2];
+                for(a=0;a<2;a++)
+                    q[a]=0.5f*((2.0f*p1[a])+(-p0[a]+p2[a])*t+(2.0f*p0[a]-5.0f*p1[a]+4.0f*p2[a]-p3[a])*t2+(-p0[a]+3.0f*p1[a]-3.0f*p2[a]+p3[a])*t3);
+                tx_[i]=q[0]; tz_[i]=q[1];
+            }
+        }
+        tx_[mm]=tx_[0]; tz_[mm]=tz_[0]; tc_[0]=0.0f;
+        for(i=0;i<mm;i++){ float ddx=tx_[i+1]-tx_[i], ddz=tz_[i+1]-tz_[i]; tc_[i+1]=tc_[i]+sqrtf(ddx*ddx+ddz*ddz); }
+        stp=tc_[mm]/(float)npts;
+        for(i=0;i<npts;i++){
+            tgt=stp*(float)i;
+            while(qq<mm-1 && tc_[qq+1]<tgt) qq++;
+            fr=(tgt-tc_[qq])/(tc_[qq+1]-tc_[qq]);
+            roadX[i]=tx_[qq]+(tx_[qq+1]-tx_[qq])*fr; roadZ[i]=tz_[qq]+(tz_[qq+1]-tz_[qq])*fr;
+        }
+    } else {
     i=0;
     for(k=0;k<n;k++){
         const float *p0=td->p[(k+n-1)%n], *p1=td->p[k];
@@ -389,6 +422,7 @@ static void buildTrack(int which)
                     +(-p0[a]+3.0f*p1[a]-3.0f*p2[a]+p3[a])*t3);
             roadX[i]=q[0]; roadZ[i]=q[1];
         }
+    }
     }
     for(i=0;i<npts;i++){
         int j=(i+1)%npts, h=(i+npts-1)%npts;
@@ -405,6 +439,25 @@ static void buildTrack(int which)
         if(roadZ[i]>mxz)mxz=roadZ[i];
     }
     trackTotal=total;
+    for(i=0;i<npts;i++) roadH[i]=0.0f;
+    if(trackHilly){           /* bumps everywhere, a few crests; the big one (s=0.772) is the dirt hill before the last corner */
+        static const float hill[4][3]={{0.772f,44.0f,1.8f},{0.205f,34.0f,0.55f},{0.515f,40.0f,0.8f},{0.605f,30.0f,0.5f}};   /* centre (lap fraction), length (m), height (m) */
+        for(i=0;i<npts;i++){
+            float s=(float)i/(float)npts, ds, h, win, e=(s<0.5f)?s:(1.0f-s);
+            int q2;
+            h=0.14f*sinf(s*total*(6.2832f/47.0f))+0.12f*sinf(s*total*(6.2832f/101.0f)+1.3f)+0.022f*sinf(s*total*(6.2832f/19.0f)+0.4f);
+            win=clampf((e-0.012f)/0.03f,0.0f,1.0f);               /* flat at the start / finish line */
+            h*=win;
+            for(q2=0;q2<4;q2++){
+                float u;
+                ds=s-hill[q2][0]; if(ds>0.5f) ds-=1.0f; if(ds<-0.5f) ds+=1.0f;
+                u=ds*total/hill[q2][1]+0.5f;
+                if(u>0.0f && u<1.0f) h+=hill[q2][2]*0.5f*(1.0f-cosf(6.2832f*u));
+            }
+            roadH[i]=h;
+        }
+    }
+    for(i=0;i<npts;i++) roadSl[i]=(roadH[(i+1)%npts]-roadH[i])/sqrtf(seg2[i]);
     /* texture scale so the road texture loops seamlessly around the lap */
     scale=5.33f; scale=64.0f*floorf(total*scale/64.0f+0.5f)/total;
     for(i=0;i<npts;i++){
@@ -421,10 +474,12 @@ static void buildTrack(int which)
         float len=sqrtf(seg2[i]);
         int *v=segV[i];
         limitSp[i]=clampf(lim,13.0f,120.0f); limitSp2[i]=limitSp[i]*limitSp[i];
-        v[0]=cl16(lx0-cx); v[1]=0; v[2]=cl16(lz0-cz);
-        v[3]=cl16(rx0-cx); v[4]=0; v[5]=cl16(rz0-cz);
-        v[6]=cl16(rx1-cx); v[7]=0; v[8]=cl16(rz1-cz);
-        v[9]=cl16(lx1-cx); v[10]=0;v[11]=cl16(lz1-cz);
+        {   float hc=0.5f*(roadH[i]+roadH[j]), hd=0.5f*(roadH[j]-roadH[i]);
+            v[0]=cl16(lx0-cx); v[1]=cl16(-hd); v[2]=cl16(lz0-cz);
+            v[3]=cl16(rx0-cx); v[4]=cl16(-hd); v[5]=cl16(rz0-cz);
+            v[6]=cl16(rx1-cx); v[7]=cl16(hd);  v[8]=cl16(rz1-cz);
+            v[9]=cl16(lx1-cx); v[10]=cl16(hd); v[11]=cl16(lz1-cz);
+            segTy[i]=floattof32(hc); }
         segTx[i]=floattof32(cx); segTz[i]=floattof32(cz);
         segCx[i]=(int)cx; segCz[i]=(int)cz;
         segV0[i]=((int)(acc*scale*16.0f))%1024;
@@ -543,6 +598,7 @@ static void placeOnTrack(Car *c,int i,float lane)
     c->x=roadX[i]+nrmX[i]*lane; c->z=roadZ[i]+nrmZ[i]*lane;
     c->h=trkH[i]; c->sn=sinf(c->h); c->cs=cosf(c->h);
     c->vx=c->vz=0.0f; c->spd=0.0f; c->w=0.0f; c->vlat=0.0f; c->aL=0.0f; c->aY=0.0f; c->idx=i; c->stuck=0; c->reverseT=0;
+    c->ar=c->ap=c->wr=c->wp=0.0f; c->air=0; c->airArm=0; c->tumb=0; c->flipT=0; c->gyInit=0;
 }
 
 static void hitFx(Car *c,float dmg,float nx,float nz)
@@ -588,6 +644,152 @@ static void hitFx(Car *c,float dmg,float nx,float nz)
     c->w+=-a*(b>0.0f?1.0f:-1.0f)*dmg*0.25f;        /* spin from off-centre hits */
     c->spv+=-b*dmg*0.12f; c->srv+=a*dmg*0.12f; c->syv+=dmg*0.05f;     /* the suspension takes the knock */
     if(c->isPlayer) shake=clampf(shake+dmg*0.02f,0.0f,0.6f);
+}
+
+
+/* ============== 3D: ground height, jumps and flips ================================================================================
+   RALLY FOREST has real hills and bumps (roadH[]).  The car follows the ground; when the ground falls away faster than gravity can
+   follow (a crest taken at speed) it leaves it and flies on a free-fall path with no tyre forces, then lands with a suspension kick
+   (and damage when it is hard).  FLIPS: the body is a box (HXB x HYB x HZB, centre of gravity in the middle).  Roll (about the long
+   axis) and pitch (about the cross axis) are two angles that tip the box over its edges: the potential energy of the centre of gravity
+   decides whether a knock is only a lurch or turns the car over, it can roll several times, slap down on its side or roof and slides
+   to a stop, and after a moment the game puts it back on its wheels.  Knocks come from tumbleHit(): a hit with sideways / forward
+   speed, sliding sideways onto the verge, or landing badly. */
+#define VERGE0 6.0f          /* road height is full up to here (road edge) ... */
+#define VERGE1 15.0f         /* ... and fades to the flat ground at this distance from the centre line */
+#define G_AIR  14.0f         /* free-fall gravity (game units) */
+#define HXB    0.85f         /* body box: half width, half height (= height of the centre of gravity), half length */
+#define HYB    0.60f
+#define HZB    1.90f
+#define PI2H   1.5707963f
+
+static float terrH(int i,float x,float z)             /* height of the ground at (x,z) next to road point i (smooth cubic along the road) */
+{
+    int j; float t,d,h,h0,h1,h2,h3,k;
+    if(!trackHilly) return 0.0f;
+    j=(i+1)%npts;
+    t=((x-roadX[i])*(roadX[j]-roadX[i])+(z-roadZ[i])*(roadZ[j]-roadZ[i]))/seg2[i];
+    if(t>1.0f){ i=j; j=(i+1)%npts; t=((x-roadX[i])*(roadX[j]-roadX[i])+(z-roadZ[i])*(roadZ[j]-roadZ[i]))/seg2[i]; }      /* the car is already past this point: use the next segment */
+    else if(t<0.0f){ j=i; i=(i+npts-1)%npts; t=((x-roadX[i])*(roadX[j]-roadX[i])+(z-roadZ[i])*(roadZ[j]-roadZ[i]))/seg2[i]; }
+    t=clampf(t,0.0f,1.0f);
+    h0=roadH[(i+npts-1)%npts]; h1=roadH[i]; h2=roadH[j]; h3=roadH[(i+2)%npts];
+    h=0.5f*((2.0f*h1)+(-h0+h2)*t+(2.0f*h0-5.0f*h1+4.0f*h2-h3)*t*t+(-h0+3.0f*h1-3.0f*h2+h3)*t*t*t);
+    d=fabsf((x-roadX[i])*nrmX[i]+(z-roadZ[i])*nrmZ[i]);
+    k=(d<=VERGE0)?1.0f:((d>=VERGE1)?0.0f:(VERGE1-d)/(VERGE1-VERGE0));
+    return h*k;
+}
+
+static void sc2(float a,float *s,float *c)               /* sin / cos; polynomial for small angles (cheap on the DS) */
+{
+    if(a>-0.6f && a<0.6f){ float a2=a*a; *s=a*(1.0f-a2*0.16666667f*(1.0f-a2*0.05f)); *c=1.0f-a2*0.5f*(1.0f-a2*0.08333333f); }
+    else { *s=sinf(a); *c=cosf(a); }
+}
+
+static float supportH(float ar,float ap)                /* height of the centre of gravity above flat ground for this attitude */
+{
+    float sr,cr,sp,cp;
+    if(ar==0.0f && ap==0.0f) return HYB;
+    sc2(ar,&sr,&cr); sc2(ap,&sp,&cp);
+    return HXB*fabsf(sr*cp)+HYB*fabsf(cr*cp)+HZB*fabsf(sp);
+}
+
+static float pivAcc(float a,float L1,float L2)          /* angular acceleration of a box tipping over its lower edge (L1 across, L2 up) */
+{
+    float s,c;
+    sc2(a,&s,&c);
+    return -GW*(L1*c*(s>=0.0f?1.0f:-1.0f)-L2*s*(c>=0.0f?1.0f:-1.0f))/(1.3333f*(L1*L1+L2*L2));
+}
+
+/* knock: (nx,nz) = direction from the car towards what hit it, speed = closing speed, arm = how far below the centre of gravity it hit */
+static void tumbleHit(Car *c,float nx,float nz,float speed,float arm)
+{
+    float rl,fl;
+    if(!c->alive || (TESTRUN && c->isPlayer)) return;
+    speed-=3.0f; if(speed<=0.0f) return;
+    rl=nx*c->cs+nz*c->sn; fl=nx*c->sn-nz*c->cs;
+    c->wr=clampf(c->wr-rl*speed*arm*3.6f,-16.0f,16.0f);        /* over the side that was hit */
+    c->wp=clampf(c->wp-fl*speed*arm*1.0f,-12.0f,12.0f);        /* nose down when hit from the front */
+}
+
+static void driveFree(Car *c,float fr)                  /* no tyre forces: airborne, or lying on its side / roof */
+{
+    c->h=wrapa(c->h+c->w*DT); c->sn=sinf(c->h); c->cs=cosf(c->h);
+    c->vx*=fr; c->vz*=fr; c->w*=fr;
+    if(c->air) c->w*=0.985f;                                  /* the car hardly turns in the air */
+    c->x+=c->vx*DT; c->z+=c->vz*DT;
+    c->spd=c->vx*c->sn-c->vz*c->cs; c->vlat=c->vx*c->cs+c->vz*c->sn;
+    c->aL*=0.9f; c->aY*=0.9f;
+}
+
+static void tumbleAxis(Car *c,float *a,float *w,float L1)   /* box tipping over its edges on the ground */
+{
+    float q0=floorf(*a/PI2H), kq, da;
+    *w+=pivAcc(*a,L1,HYB)*DT;
+    *w-=*w*0.7f*DT;
+    *a+=*w*DT;
+    if(floorf(*a/PI2H)!=q0){                              /* another face of the body hits the ground */
+        float imp=fabsf(*w);
+        *w*=0.55f;
+        if(imp>3.0f){ if(c->isPlayer) shake=clampf(shake+imp*0.04f,0.0f,0.7f); }
+        if(imp>4.5f){ hitSrc=SRC_WALL; hitFx(c,(imp-4.5f)*1.2f,c->sn,-c->cs); }
+    }
+    kq=floorf(*a/PI2H+0.5f); da=*a-kq*PI2H;
+    if(da<0.06f && da>-0.06f && *w<0.6f && *w>-0.6f){ *a=kq*PI2H; *w=0.0f; }     /* settled on a face */
+}
+
+static void vertStep(Car *c)
+{
+    int i=c->idx;
+    float gy=terrH(i,c->x,c->z), vyG, aG, pitchG=0.0f, rollG=0.0f, sup, da;
+    if(!c->gyInit){ c->gyInit=1; c->gyPrev=gy; c->y=gy; c->vy=0.0f; c->vyL=0.0f; c->air=0; }
+    vyG=(gy-c->gyPrev)/DT; if(vyG>30.0f||vyG<-30.0f) vyG=0.0f;
+    c->gyPrev=gy; c->gy=gy;
+    if(trackHilly){
+        float d=(c->x-roadX[i])*nrmX[i]+(c->z-roadZ[i])*nrmZ[i], ad=fabsf(d), kk=(ad<=VERGE0)?1.0f:((ad>=VERGE1)?0.0f:(VERGE1-ad)/(VERGE1-VERGE0));
+        float glat=(ad>VERGE0&&ad<VERGE1)?-roadH[i]*((d>0.0f)?1.0f:-1.0f)/(VERGE1-VERGE0):0.0f;
+        pitchG=roadSl[i]*(c->sn*nrmZ[i]+c->cs*nrmX[i])*kk;                  /* slope along the car */
+        rollG=glat*(c->cs*nrmX[i]+c->sn*nrmZ[i]);                           /* slope across the car (verge) */
+    }
+    aG=(vyG-c->vyL)/DT;
+    if(!c->air){
+        sup=supportH(c->ar,c->ap);
+        if(trackHilly && !c->tumb && aG<-G_AIR*1.3f && fabsf(c->spd)>6.0f){ if(++c->airArm>=3){ c->air=1; c->vy=c->vyL; c->airArm=0; } }
+        else c->airArm=0;
+        if(!c->air){ c->vy=vyG; c->vyL=vyG; c->y=gy+sup-HYB; }
+    }
+    if(c->air){
+        c->vy-=G_AIR*DT; c->y+=c->vy*DT;
+        c->ar+=c->wr*DT; c->ap+=c->wp*DT; c->wr*=0.998f; c->wp*=0.998f;
+        sup=supportH(c->ar,c->ap);
+        if(c->y+HYB-sup<=gy){                                 /* touch down */
+            float imp=-(c->vy-vyG);
+            c->air=0; c->vy=vyG; c->vyL=vyG; c->y=gy+sup-HYB;
+            if(imp>3.0f){
+                c->syv-=imp*0.35f;
+                if(c->isPlayer) shake=clampf(shake+imp*0.03f,0.0f,0.7f);
+                if(imp>6.0f){ int q; for(q=0;q<3;q++) spawnPart(PT_DUST,c->x+(rndf()-0.5f)*2.0f,gy+0.2f,c->z+(rndf()-0.5f)*2.0f,(rndf()-0.5f)*3.0f,1.0f,(rndf()-0.5f)*3.0f,0.8f); }
+            }
+            if(imp>11.0f){ hitSrc=SRC_WALL; hitFx(c,(imp-11.0f),c->sn,-c->cs); }
+        }
+    } else {                                                  /* on the ground: follow the slope, or tip over the edges */
+        da=wrapa(c->ar-rollG);
+        if(da<0.40f && da>-0.40f){ c->wr+=(-da*70.0f-c->wr*5.5f)*DT; c->ar+=c->wr*DT; }
+        else tumbleAxis(c,&c->ar,&c->wr,HXB);
+        da=wrapa(c->ap-pitchG);
+        if(da<0.45f && da>-0.45f){ c->wp+=(-da*70.0f-c->wp*5.5f)*DT; c->ap+=c->wp*DT; }
+        else tumbleAxis(c,&c->ap,&c->wp,HZB);
+    }
+    if(c->ar>3.2f) c->ar-=6.2832f; else if(c->ar<-3.2f) c->ar+=6.2832f;
+    if(c->ap>3.2f) c->ap-=6.2832f; else if(c->ap<-3.2f) c->ap+=6.2832f;
+    c->tumb=(c->ar>1.0f||c->ar<-1.0f||c->ap>1.15f||c->ap<-1.15f);
+    if(c->tumb && !c->air){
+        c->flipT++;
+        if((c->flipT>140 && fabsf(c->wr)<0.8f && fabsf(c->wp)<0.8f) || c->flipT>420){      /* back on its wheels */
+            c->ar=c->ap=c->wr=c->wp=0.0f; c->tumb=0; c->flipT=0; c->vx*=0.3f; c->vz*=0.3f; c->w=0.0f;
+            if(gmode==GM_RACE) placeOnTrack(c,c->idx,0.0f);
+            c->gyInit=0;
+        }
+    } else if(!c->tumb) c->flipT=0;
 }
 
 /* ---- vehicle dynamics ---------------------------------------------------------------------------------------
@@ -789,6 +991,7 @@ static void carVsCar(Car *a,Car *b)
         if(gmode==GM_RACE){ e=1.1f; if(rc<-25.0f) rc=-25.0f; }          /* race: softer bumps, nobody gets launched */
         J=-e*rc/(1.0f/ma+1.0f/mb);
         a->vx-=nx*J/ma; a->vz-=nz*J/ma; b->vx+=nx*J/mb; b->vz+=nz*J/mb;
+        tumbleHit(a,nx,nz,J/ma,0.18f); tumbleHit(b,-nx,-nz,J/mb,0.18f);
         dmg=(-rvn-2.0f)*0.5f;
         if(dmg>0.0f){ hitSrc=SRC_CAR; hitAtk=(int)(b-cars); hitFx(a,dmg*sqrtf(mb/ma),nx,nz); hitAtk=(int)(a-cars); hitFx(b,dmg*sqrtf(ma/mb),-nx,-nz); hitAtk=-1; }
     }
@@ -809,6 +1012,7 @@ static void carVsObstacles(Car *c)
         vn=c->vx*nx+c->vz*nz;
         if(vn<0.0f){
             c->vx-=1.25f*vn*nx; c->vz-=1.25f*vn*nz;
+            tumbleHit(c,-nx,-nz,-vn*1.25f,0.17f);
             dmg=(-vn-4.0f)*0.35f;
             if(dmg>0.0f){ hitSrc=(o->kind==OB_TREE)?SRC_TREE:SRC_OBJ; hitKind=o->kind; hitFx(c,dmg,-nx,-nz); }
         }
@@ -819,10 +1023,10 @@ static void carVsWalls(Car *c)
 {
     float lim=arenaH-c->cr, dmg;
     hitSrc=SRC_WALL;
-    if(c->x>lim){  c->x=lim;  if(c->vx>0.0f){ dmg=(c->vx-4.0f)*0.25f;  c->vx*=-0.3f; hitFx(c,dmg, 1.0f,0.0f);} }
-    if(c->x<-lim){ c->x=-lim; if(c->vx<0.0f){ dmg=(-c->vx-4.0f)*0.25f; c->vx*=-0.3f; hitFx(c,dmg,-1.0f,0.0f);} }
-    if(c->z>lim){  c->z=lim;  if(c->vz>0.0f){ dmg=(c->vz-4.0f)*0.25f;  c->vz*=-0.3f; hitFx(c,dmg,0.0f, 1.0f);} }
-    if(c->z<-lim){ c->z=-lim; if(c->vz<0.0f){ dmg=(-c->vz-4.0f)*0.25f; c->vz*=-0.3f; hitFx(c,dmg,0.0f,-1.0f);} }
+    if(c->x>lim){  c->x=lim;  if(c->vx>0.0f){ dmg=(c->vx-4.0f)*0.25f;  tumbleHit(c,1.0f,0.0f,c->vx*1.3f,0.15f); c->vx*=-0.3f; hitFx(c,dmg, 1.0f,0.0f);} }
+    if(c->x<-lim){ c->x=-lim; if(c->vx<0.0f){ dmg=(-c->vx-4.0f)*0.25f; tumbleHit(c,-1.0f,0.0f,-c->vx*1.3f,0.15f); c->vx*=-0.3f; hitFx(c,dmg,-1.0f,0.0f);} }
+    if(c->z>lim){  c->z=lim;  if(c->vz>0.0f){ dmg=(c->vz-4.0f)*0.25f;  tumbleHit(c,0.0f,1.0f,c->vz*1.3f,0.15f); c->vz*=-0.3f; hitFx(c,dmg,0.0f, 1.0f);} }
+    if(c->z<-lim){ c->z=-lim; if(c->vz<0.0f){ dmg=(-c->vz-4.0f)*0.25f; tumbleHit(c,0.0f,-1.0f,-c->vz*1.3f,0.15f); c->vz*=-0.3f; hitFx(c,dmg,0.0f,-1.0f);} }
 }
 
 /* =============================== GAME FLOW ================================= */
@@ -960,19 +1164,19 @@ static void endGame(const char *l1,const char *l2)
 static void emitCarEffects(Car *c)
 {
     float spd=fabsf(c->spd);
-    float bx=c->x-c->sn*c->cr*1.35f, bz=c->z+c->cs*c->cr*1.35f;          /* behind the car */
+    float bx=c->x-c->sn*c->cr*1.35f, bz=c->z+c->cs*c->cr*1.35f, gy=c->gy;          /* behind the car, ground height */
     if(!c->alive){
-        if((frameNo&3)==0) spawnPart(PT_BLACK,c->x,0.7f,c->z,(rndf()-0.5f)*0.8f,1.4f,(rndf()-0.5f)*0.8f,1.3f);
+        if((frameNo&3)==0) spawnPart(PT_BLACK,c->x,gy+0.7f,c->z,(rndf()-0.5f)*0.8f,1.4f,(rndf()-0.5f)*0.8f,1.3f);
         return;
     }
     if(spd>9.0f && (frameNo&3)==(int)(c->mr&3))
-        spawnPart(PT_DUST,bx,0.2f,bz,(rndf()-0.5f)*1.5f,0.8f,(rndf()-0.5f)*1.5f,0.7f);
+        spawnPart(PT_DUST,bx,gy+0.2f,bz,(rndf()-0.5f)*1.5f,0.8f,(rndf()-0.5f)*1.5f,0.7f);
     if(spd>8.0f && (fabsf(c->vlat)>4.5f || c->hbOn) && (frameNo&1)==0)               /* tyre smoke while sliding */
-        spawnPart(PT_SMOKE,bx,0.25f,bz,(rndf()-0.5f)*1.0f,0.6f,(rndf()-0.5f)*1.0f,0.9f);
+        spawnPart(PT_SMOKE,bx,gy+0.25f,bz,(rndf()-0.5f)*1.0f,0.6f,(rndf()-0.5f)*1.0f,0.9f);
     if(c->hp<45.0f && (frameNo&3)==0)
-        spawnPart(c->hp<20.0f?PT_BLACK:PT_SMOKE,c->x+c->sn*c->cr*0.9f,1.1f,c->z-c->cs*c->cr*0.9f,(rndf()-0.5f)*0.5f,1.5f,(rndf()-0.5f)*0.5f,1.0f);
+        spawnPart(c->hp<20.0f?PT_BLACK:PT_SMOKE,c->x+c->sn*c->cr*0.9f,c->y+1.1f,c->z-c->cs*c->cr*0.9f,(rndf()-0.5f)*0.5f,1.5f,(rndf()-0.5f)*0.5f,1.0f);
     if(c->nitroOn)
-        spawnPart(PT_FLAME,bx-c->sn*0.2f,0.45f,bz+c->cs*0.2f,-c->sn*3.0f,0.0f,c->cs*3.0f,0.18f);
+        spawnPart(PT_FLAME,bx-c->sn*0.2f,gy+0.45f,bz+c->cs*0.2f,-c->sn*3.0f,0.0f,c->cs*3.0f,0.18f);
 }
 
 static void updatePlay(u32 held,u32 down)
@@ -994,6 +1198,7 @@ static void updatePlay(u32 held,u32 down)
         if(c->hitCool>0) c->hitCool--;
         if(!c->alive){
             c->vx*=0.95f; c->vz*=0.95f; c->x+=c->vx*DT; c->z+=c->vz*DT; c->spd=0.0f;
+            vertStep(c);
             emitCarEffects(c);
             continue;
         }
@@ -1010,7 +1215,11 @@ static void updatePlay(u32 held,u32 down)
             if(((frameNo+k)&1)==0) aiThink(c,k,&c->aiThr,&c->aiStr,&c->aiNit);      /* AI decides every 2nd frame */
             thr=c->aiThr; str=c->aiStr; nit=c->aiNit;
         }
-        driveCar(c,thr,str,nit,hb,onRoad);
+        if(c->air||c->tumb) driveFree(c,c->air?0.9995f:0.965f);                   /* in the air or on its side / roof there are no tyre forces */
+        else driveCar(c,thr,str,nit,hb,onRoad);
+        if(!c->air && !onRoad && (c->vlat>9.0f||c->vlat<-9.0f))                   /* sliding sideways on the verge trips the car */
+            c->wr=clampf(c->wr-((c->vlat>0.0f)?1.0f:-1.0f)*(fabsf(c->vlat)-9.0f)*0.03f,-16.0f,16.0f);
+        vertStep(c);
         if(c->isPlayer){ float kmh=fabsf(c->spd)*SPD_KMH; if(kmh>maxKmh) maxKmh=kmh; }
         emitCarEffects(c);
     }
@@ -1114,7 +1323,7 @@ static void drawRoadSeg(int i)
 {
     const int *v=segV[i];
     glPushMatrix();
-    mtxT(segTx[i],0,segTz[i]);
+    mtxT(segTx[i],segTy[i],segTz[i]);
     glBegin(QUADS_MODE);
     glColor3b(255,255,255);
     tv(2,segV0[i],v[0],v[1],v[2]);   tv(1022,segV0[i],v[3],v[4],v[5]);
@@ -1247,7 +1456,19 @@ static void carTint(const Car *c,int *tr,int *tg,int *tb)
 /* vertex of a car part: (a,y,b) in car space -> rotated by heading, UV in atlas */
 static int bodyRoll, bodyPitch, bodyHeave;       /* suspension tilt of the car being drawn (rad*4096, heave in model units) */
 static int ovMode;                               /* 1 = drawing the dent overlay: texture coordinates come from the position instead */
-#define VX(pp,u,v) tv(ovMode?((((pp)[2])>>3)+(((pp)[0])>>4)):(u),ovMode?((((pp)[1])>>3)+(((pp)[0])>>3)):(v),((pp)[0]*C+(pp)[2]*S)>>12,(pp)[1]+((((pp)[0]*bodyRoll)+((pp)[2]*bodyPitch))>>12)+bodyHeave,((pp)[0]*S-(pp)[2]*C)>>12)
+static int bodyBig, bmCr, bmSr, bmCp, bmSp;       /* big rotation (flipping car): 12-bit cos/sin of roll and pitch, pivot = centre of gravity */
+#define BM_CGY ((int)(HYB*4096.0f/CAR_SCALE))
+static inline void vxf(const int *pp,int u,int v,int C,int S)
+{
+    if(bodyBig){
+        int x=pp[0], y=pp[1]-BM_CGY, b=pp[2];
+        int x1=(x*bmCr-y*bmSr)>>12, y1=(x*bmSr+y*bmCr)>>12;
+        int y2=(y1*bmCp+b*bmSp)>>12, b2=(b*bmCp-y1*bmSp)>>12;
+        tv(ovMode?(((b)>>3)+((x)>>4)):u,ovMode?((((pp[1]))>>3)+((x)>>3)):v,(x1*C+b2*S)>>12,y2+BM_CGY+bodyHeave,(x1*S-b2*C)>>12);
+    } else
+        tv(ovMode?((((pp)[2])>>3)+(((pp)[0])>>4)):u,ovMode?((((pp)[1])>>3)+(((pp)[0])>>3)):v,((pp)[0]*C+(pp)[2]*S)>>12,(pp)[1]+((((pp)[0]*bodyRoll)+((pp)[2]*bodyPitch))>>12)+bodyHeave,((pp)[0]*S-(pp)[2]*C)>>12);
+}
+#define VX(pp,u,v) vxf(pp,u,v,C,S)
 
 /* flat-coloured box (extras) - samples the white swatch of the atlas, tinted by vertex colour */
 static void xBox(int C,int S,const XBox *x,int f100)
@@ -1384,7 +1605,10 @@ static void drawCarBody(const Car *c,int lod)
 {
     const CarDef *d=&carDefs[c->model];
     int C=(int)(c->cs*4096.0f), S=(int)(c->sn*4096.0f);
-    bodyRoll=(int)(c->sr*4096.0f); bodyPitch=(int)(c->sp*4096.0f); bodyHeave=(int)(c->sy*(4096.0f/CAR_SCALE));
+    bodyHeave=(int)(c->sy*(4096.0f/CAR_SCALE));
+    bodyBig=(c->ar>0.40f||c->ar<-0.40f||c->ap>0.45f||c->ap<-0.45f);
+    if(bodyBig){ float ra=c->ar+c->sr, pa=c->ap+c->sp; bmCr=(int)(cosf(ra)*4096.0f); bmSr=(int)(sinf(ra)*4096.0f); bmCp=(int)(cosf(pa)*4096.0f); bmSp=(int)(sinf(pa)*4096.0f); bodyRoll=bodyPitch=0; }
+    else { bodyRoll=(int)((c->sr+c->ar)*4096.0f); bodyPitch=(int)((c->sp+c->ap)*4096.0f); }
     int n=d->nst, i, r, sd, k, m=c->model;
     int P[MAXST][NRING][2][3];
     int tr,tg,tb,f100;
@@ -1405,7 +1629,7 @@ static void drawCarBody(const Car *c,int lod)
 
     ovMode=0;
     glPushMatrix();
-    mtxT(floattof32(c->x),0,floattof32(c->z));
+    mtxT(floattof32(c->x),floattof32(c->y),floattof32(c->z));
     mtxS(floattof32(CAR_SCALE),floattof32(CAR_SCALE),floattof32(CAR_SCALE));
     glBegin(QUADS_MODE);
     bodyQuads(c,d,P,C,S,tr,tg,tb,0,lod);
@@ -1429,7 +1653,7 @@ static void drawCarBody(const Car *c,int lod)
 
     if(lod<=1 && c->alive && c->hp<75.0f){                  /* dents + scratches: the overlay is drawn just outside the paint */
         glPushMatrix();
-        mtxT(floattof32(c->x),0,floattof32(c->z));
+        mtxT(floattof32(c->x),floattof32(c->y),floattof32(c->z));
         mtxS(floattof32(CAR_SCALE*1.016f),floattof32(CAR_SCALE*1.016f),floattof32(CAR_SCALE*1.016f));
         ovMode=1;
         useTex(TX_DMG1); glBegin(QUADS_MODE); glColor3b(235,235,235);
@@ -1450,10 +1674,13 @@ static void drawWheels(const Car *c,int pass)
     const CarDef *d=&carDefs[c->model];
     int C=(int)(c->cs*4096.0f), S=(int)(c->sn*4096.0f);
     int sA=(int)(c->steer*0.4f*4096.0f), cA=4096-((sA*sA)>>13);
-    bodyRoll=bodyPitch=bodyHeave=0;                      /* wheels stay on the ground, only the body moves on its springs */
+    bodyHeave=0;                                         /* wheels stay on the ground, only the body moves on its springs */
+    bodyBig=(c->ar>0.40f||c->ar<-0.40f||c->ap>0.45f||c->ap<-0.45f);
+    if(bodyBig){ bmCr=(int)(cosf(c->ar)*4096.0f); bmSr=(int)(sinf(c->ar)*4096.0f); bmCp=(int)(cosf(c->ap)*4096.0f); bmSp=(int)(sinf(c->ap)*4096.0f); bodyRoll=bodyPitch=0; }
+    else { bodyRoll=(int)(c->ar*4096.0f); bodyPitch=(int)(c->ap*4096.0f); }
     int ax, s, k, q, e, ww=d->ww;
     glPushMatrix();
-    mtxT(floattof32(c->x),0,floattof32(c->z));
+    mtxT(floattof32(c->x),floattof32(c->y),floattof32(c->z));
     mtxS(floattof32(CAR_SCALE),floattof32(CAR_SCALE),floattof32(CAR_SCALE));
     glBegin(QUADS_MODE);
     glColor3b(255,255,255);
@@ -1496,6 +1723,7 @@ static void drawWheels(const Car *c,int pass)
 
 static void drawShadow(const Car *c,int k)
 {
+    bodyBig=0;
     const CarDef *d=&carDefs[c->model];
     int C=(int)(c->cs*4096.0f), S=(int)(c->sn*4096.0f);
     int a=0, i, b0=d->st[0].b+819, b1=d->st[d->nst-1].b-819, y=K16(0.08f);
@@ -1503,7 +1731,7 @@ static void drawShadow(const Car *c,int k)
     a+=819;
     glPolyFmt(POLY_ALPHA(13)|POLY_CULL_NONE|POLY_ID(1+k));
     glPushMatrix();
-    mtxT(floattof32(c->x),0,floattof32(c->z));
+    mtxT(floattof32(c->x),floattof32(c->gy),floattof32(c->z));
     mtxS(floattof32(CAR_SCALE),floattof32(CAR_SCALE),floattof32(CAR_SCALE));
     glBegin(QUADS_MODE);
     glColor3b(0,0,0);
@@ -1530,7 +1758,7 @@ static void drawDebris(void)
         mtxS(floattof32(CAR_SCALE),floattof32(CAR_SCALE),floattof32(CAR_SCALE));
         if(q->kind==0){
             XBox bx;
-            bodyRoll=(int)(q->tilt*4096.0f); bodyPitch=(int)(q->tilt*2048.0f); bodyHeave=0;
+            bodyBig=0; bodyRoll=(int)(q->tilt*4096.0f); bodyPitch=(int)(q->tilt*2048.0f); bodyHeave=0;
             bx.a0=-q->ha; bx.a1=q->ha; bx.y0=-q->hy; bx.y1=q->hy; bx.b0=-q->hb; bx.b1=q->hb; bx.r=q->r; bx.g=q->g; bx.b=q->b;
             useTex(TX_WHITE); glBegin(QUADS_MODE); xBox(C,S,&bx,100); glEnd();
         } else {
@@ -1732,11 +1960,12 @@ static void render(void)
         Car *p=&cars[playerIdx];
         float s,c;
         camH+=wrapa(p->h-camH)*0.1f;
+        camGY+=(p->y-camGY)*0.18f;                              /* camera rides over the hills with the car */
         s=sinf(camH); c=cosf(camH);
         fpEff=(state==ST_END)?0:camMode;
         { const CarDef *pd=&carDefs[p->model];
           { float pull=(state==ST_END)?clampf((float)endT/90.0f,0.0f,1.0f)*0.55f:0.0f;      /* after the finish the camera drifts back */
-          ex=p->x-s*pd->camD*(1.0f+pull); ez=p->z+c*pd->camD*(1.0f+pull); ey=pd->camY*(1.0f+pull*0.8f)+((frameNo&1)?shake:-shake)*0.5f; } ly=0.8f+pd->roof*0.25f; }
+          ex=p->x-s*pd->camD*(1.0f+pull); ez=p->z+c*pd->camD*(1.0f+pull); ey=camGY+pd->camY*(1.0f+pull*0.8f)+((frameNo&1)?shake:-shake)*0.5f; } ly=p->y*0.7f+camGY*0.3f+0.8f+pd->roof*0.25f; }
         lx=p->x+s*5.0f; lz=p->z-c*5.0f;
         if(lookBack && state!=ST_END){                          /* look behind: R held */
             if(fpEff==0){ ex=p->x+s*pd0(p)->camD*0.9f; ez=p->z-c*pd0(p)->camD*0.9f; lx=p->x-s*5.0f; lz=p->z+c*5.0f; }   /* chase view: camera swings in front, looking back over the car */
@@ -1748,7 +1977,7 @@ static void render(void)
             if(fpEff==1){ float hy=(float)pd->st[hb].y[5], ry=pd->roof*4096.0f; fo=(float)(pd->st[hb].b-250)*K; h=(hy+0.55f*(ry-hy))*K; }
             else if(dir>0.0f){ fo=(float)pd->st[0].b*K+0.15f; h=0.55f; }
             else { fo=(float)pd->st[n-1].b*K-0.15f; h=0.6f; }
-            ex=p->x+s*fo; ez=p->z-c*fo; ey=h+p->sy+((frameNo&1)?shake:-shake)*0.3f;
+            ex=p->x+s*fo; ez=p->z-c*fo; ey=p->y+h+p->sy+((frameNo&1)?shake:-shake)*0.3f;
             lx=ex+s*10.0f*dir; lz=ez-c*10.0f*dir; ly=ey-(fpEff==1?0.45f:0.05f)+p->sp*6.0f;
         } else ly+=0.0f;
         if(gmode==GM_DERBY){ ex=clampf(ex,-(arenaH-1.5f),arenaH-1.5f); ez=clampf(ez,-(arenaH-1.5f),arenaH-1.5f); }

@@ -34,7 +34,7 @@ jobs:
           sed -i 's|-lnds9|-lfilesystem -lfat -lnds9 -lm|' proj/Makefile
 
           rm -f proj/source/*
-          for f in main.c audio.h textures.h cars.h sounds.h images.h carimgs.h forestmap.h forestatlas.h mappics.h; do
+          for f in main.c audio.h textures.h cars.h sounds.h images.h carimgs.h forestmap.h forestatlas.h mappics.h menuroom.h; do
             if [ -f "source/$f" ]; then
               cp "source/$f" proj/source/
             elif [ -f "$f" ]; then

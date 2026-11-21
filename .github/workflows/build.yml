@@ -6,6 +6,8 @@ on:
     paths:
       - '**.c'
       - '**.h'
+      - 'nitrofiles/**'
+      - 'music/**'
 
 jobs:
   build:
@@ -28,7 +30,8 @@ jobs:
           test -n "$T"
           cp -r "$T" proj
 
-          sed -i 's|^LIBS := -lnds9$|LIBS := -lnds9 -lm|' proj/Makefile
+          # Підключаємо libfilesystem та libfat для роботи NitroFS
+          sed -i 's|-lnds9|-lfilesystem -lfat -lnds9 -lm|' proj/Makefile
 
           rm -f proj/source/*
           for f in main.c audio.h textures.h cars.h sounds.h images.h carimgs.h forestmap.h forestatlas.h mappics.h; do
@@ -42,30 +45,14 @@ jobs:
             fi
           done
 
-          echo "=== MUSIC DATA (built into the game) ==="
-          python3 - <<'PY'
-          import os
-          names = ['menu', 'race1', 'race2', 'race3', 'race4']
-          out = open('proj/source/music_data.c', 'w')
-          out.write('/* generated from music/*.bin by the build */\n')
-          for n in names:
-              data = b''
-              for d in ('music', 'source/music', 'nitrofiles/music', '.'):
-                  p = os.path.join(d, n + '.bin')
-                  if os.path.isfile(p):
-                      data = open(p, 'rb').read()
-                      print('music', n, len(data), 'bytes from', p)
-                      break
-              out.write('const unsigned int musSize_%s = %d;\n' % (n, len(data)))
-              out.write('const unsigned char musData_%s[%d] __attribute__((aligned(4))) = {\n' % (n, max(len(data), 4)))
-              for i in range(0, len(data), 32):
-                  out.write(','.join(str(b) for b in data[i:i + 32]) + ',\n')
-              if not data:
-                  out.write('0,0,0,0\n')
-              out.write('};\n')
-          out.close()
-          PY
-          test -s proj/source/music_data.c
+          echo "=== PREPARE NITROFS MUSIC ==="
+          mkdir -p proj/nitrofiles/music
+          if [ -d "nitrofiles/music" ]; then
+            cp -r nitrofiles/music/* proj/nitrofiles/music/
+          elif [ -d "music" ]; then
+            cp -r music/*.bin proj/nitrofiles/music/ 2>/dev/null || true
+          fi
+          ls -lh proj/nitrofiles/music/
 
           echo "=== BUILD ARM9 ==="
           make -C proj TARGET=Flatout-DS clean
@@ -112,11 +99,12 @@ jobs:
           test -n "$NDSTOOL"
           echo "NDSTOOL: $NDSTOOL"
 
-          echo "=== CREATE NDS ROM ==="
+          echo "=== CREATE NDS ROM WITH NITROFS ==="
           "$NDSTOOL" -c proj/Flatout-DS.nds \
             -9 "$ARM9_ELF" \
             -7 "$ARM7_ELF" \
             -b proj/icon.bmp \
+            -d proj/nitrofiles \
             "Flatout DS;Homebrew;devkitPro"
 
           echo "=== VERIFY ROM ==="

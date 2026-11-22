@@ -36,7 +36,7 @@
 #define DT       (1.0f/60.0f)
 
 #define MAXC     8
-#define MAXCTRL  48
+#define MAXCTRL  56
 #define SUBD     7
 #define MAXPTS   (MAXCTRL*SUBD)
 #define HALFW    6.0f
@@ -134,7 +134,7 @@ typedef struct { float x,y,z,vx,vy,vz,life,max; int type; } Part;
 
 typedef struct { int n; float p[MAXCTRL][2]; } TrackDef;
 
-static const TrackDef trackDefs[2] = {
+static const TrackDef trackDefs[3] = {
     /* RALLY FOREST: traced from the minimap of the original map and scaled up (clockwise, point 0 = start line, lap ~1.65 km) */
     { 44, {{-36,-281},{97,-282},{148,-278},{161,-272},{171,-262},{179,-248},{184,-219},
            {187,-150},{183,-48},{183,121},{182,201},{176,215},{168,226},{156,234},
@@ -145,13 +145,24 @@ static const TrackDef trackDefs[2] = {
            {-147,-277},{-126,-281}} },
     { 18, {{0,-110},{70,-110},{125,-85},{130,-30},{100,10},{60,25},{40,60},{70,100},
            {40,135},{-20,125},{-60,95},{-45,55},{-85,30},{-125,50},{-135,0},{-110,-50},
-           {-60,-70},{-40,-105}} }
+           {-60,-70},{-40,-105}} },
+    /* HARVEST: traced from the lap map of an autumn farm track (clockwise, point 0 = start line, lap ~2.0 km) */
+    { 54, {{-194,-243},{-157,-245},{-119,-245},{-82,-244},{-46,-235},{-9,-237},
+           {28,-245},{65,-248},{103,-248},{140,-248},{178,-248},{215,-248},
+           {253,-248},{287,-235},{304,-202},{310,-165},{310,-128},{305,-91},
+           {292,-56},{263,-34},{226,-33},{188,-33},{151,-33},{113,-33},
+           {76,-33},{39,-33},{1,-33},{-36,-33},{-73,-28},{-105,-8},
+           {-120,25},{-123,62},{-122,100},{-122,137},{-120,175},{-128,211},
+           {-150,240},{-186,248},{-219,232},{-248,209},{-276,184},{-299,154},
+           {-309,118},{-309,81},{-310,43},{-310,6},{-310,-32},{-310,-69},
+           {-310,-106},{-309,-144},{-308,-181},{-298,-217},{-269,-239},{-232,-244}} }
 };
 
-static const char *mapName[4] = { "STADIUM", "JUNKYARD", "FOREST", "CANYON" };
-static const unsigned char themeGround[4] = { TX_DIRT, TX_DIRT, TX_GRASS, TX_SAND };
-static const unsigned char themeSky[4]    = { TX_SKY_FOREST, TX_SKY_DESERT, TX_SKY_FOREST, TX_SKY_DESERT };
-static const unsigned char themeTint[4][3]= { {255,255,255},{214,196,176},{255,255,255},{255,238,222} };
+static const char *mapName[5] = { "STADIUM", "JUNKYARD", "FOREST", "CANYON", "HARVEST" };
+static const unsigned char themeGround[5] = { TX_DIRT, TX_DIRT, TX_GRASS, TX_SAND, TX_GRASS };
+static const unsigned char themeSky[5]    = { TX_SKY_FOREST, TX_SKY_DESERT, TX_SKY_FOREST, TX_SKY_DESERT, TX_SKY_FOREST };
+static const unsigned char themeTint[5][3]= { {255,255,255},{214,196,176},{255,255,255},{255,238,222},{255,232,186} };
+#define IS_FM(m) ((m)==2||(m)==4)            /* maps built from maps.h: RALLY FOREST (2) and HARVEST (4) */
 static const char *diffName[3] = { "EASY", "NORMAL", "HARD" };
 /* AI LEVEL (race settings, Y on the track screen).  EASY = the old normal bots; HARD bots are much faster, corner and brake later,
    keep full throttle to the limit, tailgate instead of lifting, use nitro early and catch up with a player who runs away. */
@@ -184,7 +195,8 @@ static int   paused, endSel, endDirty, endBright, endN, endRows[MAXC];   /* resu
 static float endKey[MAXC];
 static Car   cars[MAXC];
 static Obs   obs[MAXOBS];
-static void fmBuild(void);                 /* forestmap.h: roadside of RALLY FOREST */
+static void fmBuild(void);                 /* maps.h: roadside of RALLY FOREST and HARVEST */
+static int fmTrk;                           /* maps.h: 0 = RALLY FOREST, 1 = HARVEST */
 static void fmDraw(void);
 static void fmCollide(Car *c);
 static void fmInitTex(void);
@@ -398,8 +410,8 @@ static void buildTrack(int which)
     int n=td->n, k,s,i,a;
     float total=0.0f, scale, acc=0.0f, mnx=1e9f,mxx=-1e9f,mnz=1e9f,mxz=-1e9f;
     npts=n*SUBD;
-    trackHilly=(which==0);
-    if(which==0){                       /* RALLY FOREST: spline sampled again at equal distances, so every road segment is the same length */
+    trackHilly=(which==0||which==2);
+    if(which==0||which==2){                       /* RALLY FOREST: spline sampled again at equal distances, so every road segment is the same length */
         static float tx_[MAXCTRL*16+1], tz_[MAXCTRL*16+1], tc_[MAXCTRL*16+2];
         int mm=n*16, qq=0; float stp, tgt, fr;
         i=0;
@@ -453,7 +465,9 @@ static void buildTrack(int which)
     trackTotal=total;
     for(i=0;i<npts;i++) roadH[i]=0.0f;
     if(trackHilly){           /* bumps everywhere, a few crests; the big one (s=0.772) is the dirt hill before the last corner */
-        static const float hill[4][3]={{0.772f,44.0f,1.8f},{0.205f,34.0f,0.55f},{0.515f,40.0f,0.8f},{0.605f,30.0f,0.5f}};   /* centre (lap fraction), length (m), height (m) */
+        static const float hillF[4][3]={{0.772f,44.0f,1.8f},{0.205f,34.0f,0.55f},{0.515f,40.0f,0.8f},{0.605f,30.0f,0.5f}};   /* centre (lap fraction), length (m), height (m) */
+        static const float hillH[4][3]={{0.335f,38.0f,0.45f},{0.585f,44.0f,0.65f},{0.215f,30.0f,0.30f},{0.885f,34.0f,0.30f}};   /* HARVEST: gentle rolling farm road */
+        const float (*hill)[3]=(which==2)?hillH:hillF;
         for(i=0;i<npts;i++){
             float s=(float)i/(float)npts, ds, h, win, e=(s<0.5f)?s:(1.0f-s);
             int q2;
@@ -466,6 +480,7 @@ static void buildTrack(int which)
                 u=ds*total/hill[q2][1]+0.5f;
                 if(u>0.0f && u<1.0f) h+=hill[q2][2]*0.5f*(1.0f-cosf(6.2832f*u));
             }
+            if(h<-0.18f) h=-0.18f;                                   /* never sink to the level of the ground plane (-0.25): the road would flicker through it */
             roadH[i]=h;
         }
     }
@@ -531,7 +546,7 @@ static void buildScenery(void)
 {
     int tries=0, ok, j, k;
     nobs=0;
-    if(mapId==2){ fmBuild(); return; }
+    if(IS_FM(mapId)){ fmTrk=(mapId==4); fmBuild(); return; }
     while(nobs<150 && tries<3000){
         float side=(rnd()&1)?1.0f:-1.0f;
         float off=HALFW+4.5f+rndf()*26.0f;
@@ -1095,6 +1110,7 @@ static void setupDerby(void)
     int k;
     float spawnR;
     ncars=1+botsN; playerIdx=0;
+    trackHilly=0;                      /* arenas are flat: do not keep the forest's hill flag from the previous race */
     buildArena(mapId);
     spawnR=arenaH*0.62f;
     for(k=0;k<ncars;k++){
@@ -1251,7 +1267,7 @@ static void updatePlay(u32 held,u32 down)
     for(i=0;i<ncars;i++) for(j=i+1;j<ncars;j++) carVsCar(&cars[i],&cars[j]);
     for(i=0;i<ncars;i++){
         carVsObstacles(&cars[i]);
-        if(mapId==2) fmCollide(&cars[i]);
+        if(IS_FM(mapId)) fmCollide(&cars[i]);
         if(gmode==GM_DERBY) carVsWalls(&cars[i]);
     }
     updateParts();
@@ -1470,7 +1486,7 @@ static void drawArena(void)
     }
 }
 
-#include "forestmap.h"      /* RALLY FOREST roadside geometry, props, trees and wall collisions */
+#include "maps.h"            /* roadside geometry, props, trees and wall collisions of RALLY FOREST and HARVEST */
 
 /* ---- menu garage: the room the cars stand in on every menu screen (generated by gen_menu_room.py) ---- */
 #include "menuroom.h"
@@ -1776,26 +1792,47 @@ static void drawWheels(const Car *c,int pass)
     glPopMatrix(1);
 }
 
+#ifndef CAR_SHADOW
+#define CAR_SHADOW 1            /* 0 = no car shadows at all (if a dark patch beside the cars is still visible, try this) */
+#endif
+/* Car shadow: a dark translucent quad on the ground.  It used to be ONE FLAT rectangle at the height of the ground under the car's
+   centre and a bit larger than the car, so from the chase camera it stuck out behind and beside the body as a big dark wedge, and
+   on the hills of RALLY FOREST half of it sank into the slope or floated over it (looked like a hole in the map).
+   Now (in a race / derby) it is smaller than the body, so the car hides it, and every corner follows the real ground height. */
 static void drawShadow(const Car *c,int k)
 {
-    bodyBig=0;
+#if CAR_SHADOW
     const CarDef *d=&carDefs[c->model];
+    const float K=CAR_SCALE/4096.0f;
     int C=(int)(c->cs*4096.0f), S=(int)(c->sn*4096.0f);
-    int a=0, i, b0=d->st[0].b+819, b1=d->st[d->nst-1].b-819, y=K16(0.08f);
+    int a=0, i, n, b0, b1, y0=K16(0.10f), ca[4], cb[4], cy[4];
+    int follow=(trackHilly && gmode==GM_RACE && state!=ST_MENU);
+    bodyBig=0;
     for(i=0;i<d->nst;i++) if(d->st[i].x[2]>a) a=d->st[i].x[2];
-    a+=819;
+    if(state==ST_MENU){ a+=819; b0=d->st[0].b+819; b1=d->st[d->nst-1].b-819; }               /* menu garage: as before */
+    else { a=a*80/100; b0=d->st[0].b-1000; b1=d->st[d->nst-1].b+1000; }                        /* in the game: hidden under the body */
+    ca[0]=-a; cb[0]=b1;  ca[1]=a; cb[1]=b1;  ca[2]=a; cb[2]=b0;  ca[3]=-a; cb[3]=b0;
+    for(n=0;n<4;n++){
+        cy[n]=y0;
+        if(follow){                                                   /* ground height under this corner, relative to the car's own ground height */
+            float h=terrH(c->idx,c->x+(float)((ca[n]*C-cb[n]*S)>>12)*K,c->z+(float)((ca[n]*S+cb[n]*C)>>12)*K)-c->gy;
+            int dy=(int)(h/K);
+            if(dy>12000) dy=12000; else if(dy<-12000) dy=-12000;
+            cy[n]=y0+dy;
+        }
+    }
     glPolyFmt(POLY_ALPHA(13)|POLY_CULL_NONE|POLY_ID(1+k));
     glPushMatrix();
     mtxT(floattof32(c->x),floattof32(c->gy),floattof32(c->z));
     mtxS(floattof32(CAR_SCALE),floattof32(CAR_SCALE),floattof32(CAR_SCALE));
     glBegin(QUADS_MODE);
     glColor3b(0,0,0);
-    tv(6,6,(-a*C-b1*S)>>12,y,(-a*S+b1*C)>>12);
-    tv(6,6,( a*C-b1*S)>>12,y,( a*S+b1*C)>>12);
-    tv(6,6,( a*C-b0*S)>>12,y,( a*S+b0*C)>>12);
-    tv(6,6,(-a*C-b0*S)>>12,y,(-a*S+b0*C)>>12);
+    for(n=0;n<4;n++) tv(6,6,(ca[n]*C-cb[n]*S)>>12,cy[n],(ca[n]*S+cb[n]*C)>>12);
     glEnd();
     glPopMatrix(1);
+#else
+    (void)c; (void)k;
+#endif
 }
 
 /* panels / wheels lying around after they fell off */
@@ -2057,10 +2094,10 @@ static void render(void)
     else { glClearColor(9,15,25,31); drawSky(ex,ez); drawGround(ex,ez); }
     if(state!=ST_MENU){
         if(gmode==GM_RACE){
-            treeCull=(mapId==2)?62:85;
+            treeCull=IS_FM(mapId)?62:85;
             drawRoad();
             drawGantry();
-            if(mapId==2) fmDraw();
+            if(IS_FM(mapId)) fmDraw();
             drawBillboards(OB_TREE,mapId==3?TX_CACTUS:TX_PINE,mapId==3?K16(1.125f):K16(1.75f),mapId==3?K16(4.5f):K16(7.0f));
             if(mapId==3) drawBillboards(OB_ROCK,TX_ROCK,K16(1.6f),K16(1.6f));
         } else drawArena();
@@ -2103,7 +2140,7 @@ static u16 menuBg[HUDW*HUDH] __attribute__((aligned(4)));
 static u16 barTop[HUDW*24]   __attribute__((aligned(4)));
 static u16 barBot[HUDW*22]   __attribute__((aligned(4)));
 static u16 *hudFb;
-static float trackLen[2];
+static float trackLen[3];
 
 #define C15(r,g,b) ARGB16(1,(r)>>3,(g)>>3,(b)>>3)
 #define COL_WHITE  C15(244,244,244)
@@ -2158,6 +2195,7 @@ static void initMenuData(void)
     initHudArt();
     buildTrack(0); trackLen[0]=trackTotal;
     buildTrack(1); trackLen[1]=trackTotal;
+    buildTrack(2); trackLen[2]=trackTotal;
 }
 
 /* ---- drawing primitives ---- */
@@ -2594,19 +2632,22 @@ static void hudMaps(void)
     hcopy(menuBg,0,HUDH);
     hHeader(race?"SELECT TRACK":"SELECT ARENA");
     hrect(176,5,74,14,C15(110,40,24)); hframe(176,5,74,14,COL_EDGE); htextS(182,8,"Y  SETTINGS",COL_WHITE,1);
+    {   int base=(race&&mapSel==2)?1:0;                              /* three tracks, two tiles: the list scrolls when the last one is picked */
     for(i=0;i<2;i++){
-        int x=i?134:10, y=32, sel=(i==mapSel);
+        int m=base+i, x=i?134:10, y=32, sel=(m==mapSel);
         hrect(x-3,y-3,118,82,sel?COL_YEL:C15(84,66,32));
         hrect(x-1,y-1,114,78,C15(24,19,11));
         hrect(x+4,y+4,104,52,race?C15(34,62,34):C15(40,34,24));
-        if(race && i==0){                                              /* FOREST: picture + small track outline */
+        if(race && m==0){                                              /* FOREST: picture + small track outline */
             hCarPic(x+4,y+4,MAPPIC_W,MAPPIC_H,mapPic_forest,sel?0:3);
             hrect(x+4+104-38,y+4+52-34,38,34,C15(20,18,12));
-            hTrackThumb(i,x+4+104-38,y+4+52-34,38,34,C15(255,226,150));
+            hTrackThumb(m,x+4+104-38,y+4+52-34,38,34,C15(255,226,150));
         }
-        else if(race) hTrackThumb(i,x+4,y+4,104,52,C15(200,178,140));
-        else     hArenaThumb(i,x+4,y+4,104,52);
-        htextS(x+8,y+63,mapName[race?2+i:i],sel?COL_YEL:COL_CREAM,1);
+        else if(race) hTrackThumb(m,x+4,y+4,104,52,C15(200,178,140));
+        else     hArenaThumb(m,x+4,y+4,104,52);
+        htextS(x+8,y+63,mapName[race?2+m:m],sel?COL_YEL:COL_CREAM,1);
+    }
+    if(race){ int d; for(d=0;d<3;d++) hrect(120+d*8,113,5,3,d==mapSel?COL_YEL:C15(84,66,32)); }   /* which of the 3 tracks */
     }
     if(race){
         hInfoRow(118,"TRACK",mapName[2+mapSel]);
@@ -2955,8 +2996,8 @@ static void menuTouch(int tx,int ty)
             for(i=0;i<rows;i++) if(ty>=30+i*26&&ty<52+i*26){ setSel=i; setChange(tx<128?-1:1); sndUi(0); }
         } else if(tx>=176&&ty<22){ setOpen=1; setSel=0; sndUi(1); hudTimer=0; }
         else for(i=0;i<2;i++){
-            int x=i?134:10;
-            if(tx>=x&&tx<x+112&&ty>=32&&ty<110){ if(mapSel==i) menuOk(); else { mapSel=i; sndUi(0); } hudTimer=0; }
+            int x=i?134:10, m=i+((modeSel==0&&mapSel==2)?1:0);
+            if(tx>=x&&tx<x+112&&ty>=32&&ty<110){ if(mapSel==m) menuOk(); else { mapSel=m; sndUi(0); } hudTimer=0; }
         }
     } else if(menuScr==SC_CAR){
         if(ty>=128&&ty<166){                                         /* tap the neighbouring icon (or an arrow) to scroll */
@@ -2994,7 +3035,10 @@ static void menuInput(u32 down,int touched,int tx,int ty)
             if(dn) setSel=(setSel+1)%rows;
             if(left) setChange(-1);
             if(right) setChange(1);
-        } else if(left||right||up||dn) mapSel^=1;
+        } else if(left||right||up||dn){
+            if(modeSel==0){ if(left||up) mapSel=(mapSel+2)%3; else mapSel=(mapSel+1)%3; }   /* 3 tracks */
+            else mapSel^=1;                                                                  /* 2 arenas */
+        }
     } else if(menuScr==SC_CAR){
         if(left)  carSel=(carSel+NCARDEF-1)%NCARDEF;
         if(right) carSel=(carSel+1)%NCARDEF;

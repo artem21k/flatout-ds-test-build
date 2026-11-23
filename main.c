@@ -197,6 +197,8 @@ static Car   cars[MAXC];
 static Obs   obs[MAXOBS];
 static void fmBuild(void);                 /* maps.h: roadside of RALLY FOREST and HARVEST */
 static int fmTrk;                           /* maps.h: 0 = RALLY FOREST, 1 = HARVEST */
+static int fmGround(float x,float z);       /* maps.h: HARVEST ground class under (x,z): 1 forest, 2 field, 3 river */
+static int grdKind=0;                       /* what the car is driving on beside the road: 0 normal, 2 field, 3 river */
 static void fmDraw(void);
 static void fmCollide(Car *c);
 static void fmInitTex(void);
@@ -854,6 +856,8 @@ static void driveCar(Car *c,float thr,float strTgt,int nit,int hb,int onRoad)
     dragK=0.27f*acc/fmaxf(c->vtop*c->topK,30.0f);                                    /* engine fades with speed; drag set so the car just reaches its top speed */
     if(nit && c->nitro>0.0f){ acc*=2.0f; maxsp*=(c->vtop>40.0f)?1.15f:1.4f; c->nitro-=0.55f; if(c->nitro<0.0f)c->nitro=0.0f; c->nitroOn=1; }
     if(!onRoad){ maxsp*=0.6f; dragK+=0.9f; }
+    if(!onRoad && grdKind==2){ maxsp*=0.75f; dragK+=1.2f; }                           /* HARVEST: the yellow field really holds you back */
+    else if(!onRoad && grdKind==3){ maxsp*=0.35f; dragK+=3.5f; }                      /* ...and the river even more */
     c->steer+=(strTgt-c->steer)*(0.25f/(1.0f+fabsf(c->spd)*0.015f));
     c->hbOn=hb;
 
@@ -1257,7 +1261,7 @@ static void updatePlay(u32 held,u32 down)
             thr=c->aiThr; str=c->aiStr; nit=c->aiNit;
         }
         if(c->air||c->tumb) driveFree(c,c->air?0.9995f:0.965f);                   /* in the air or on its side / roof there are no tyre forces */
-        else driveCar(c,thr,str,nit,hb,onRoad);
+        else{ grdKind=(mapId==4 && !onRoad)?fmGround(c->x,c->z):0; driveCar(c,thr,str,nit,hb,onRoad); }
         if(!c->air && !onRoad && (c->vlat>11.0f||c->vlat<-11.0f))                   /* sliding sideways on the verge trips the car */
             c->wr=clampf(c->wr-((c->vlat>0.0f)?1.0f:-1.0f)*(fabsf(c->vlat)-11.0f)*0.03f,-16.0f,16.0f);
         vertStep(c);
@@ -1341,9 +1345,36 @@ static void drawSky(float cx,float cz)
     glPopMatrix(1);
 }
 
+/* HARVEST: autumn ground, painted by class: forest floor (leaves), yellow field, river.  16 m tiles, one texture pass per class */
+static void drawGroundH(float cx,float cz)
+{
+    static const unsigned char tx[4]={TX_DIRT,TX_DIRT,TX_SAND,TX_WHITE};
+    static const unsigned char tn[4][3]={{255,196,112},{255,196,112},{255,224,106},{66,116,172}};
+    int ix0=(int)floorf(cx/16.0f), iz0=(int)floorf(cz/16.0f), i, j, pass;
+    for(pass=1;pass<=3;pass++){
+        useTex(tx[pass]);
+        for(j=iz0-6;j<=iz0+6;j++) for(i=ix0-6;i<=ix0+6;i++){
+            int gk=fmGround((float)(i*16+8),(float)(j*16+8)), sh;
+            if(gk==0) gk=1;
+            if(gk!=pass) continue;
+            sh=(((i*7+j*13)&3)==0)?226:255;
+            glPushMatrix();
+            mtxT(inttof32(i*16+8),floattof32(-0.25f),inttof32(j*16+8));
+            mtxS(inttof32(8),inttof32(1),inttof32(8));
+            glBegin(QUADS_MODE);
+            glColor3b(tn[pass][0]*sh/255,tn[pass][1]*sh/255,tn[pass][2]*sh/255);
+            tv(0,0,-4096,0,-4096); tv(3072,0,4096,0,-4096);
+            tv(3072,3072,4096,0,4096); tv(0,3072,-4096,0,4096);
+            glEnd();
+            glPopMatrix(1);
+        }
+    }
+}
+
 static void drawGround(float cx,float cz)
 {
     int ix0=(int)floorf(cx/24.0f), iz0=(int)floorf(cz/24.0f), i, j;
+    if(mapId==4){ drawGroundH(cx,cz); return; }
     const unsigned char *t=themeTint[mapId];
     useTex(themeGround[mapId]);
     for(j=iz0-4;j<=iz0+4;j++) for(i=ix0-4;i<=ix0+4;i++){

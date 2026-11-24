@@ -146,16 +146,15 @@ static const TrackDef trackDefs[3] = {
     { 18, {{0,-110},{70,-110},{125,-85},{130,-30},{100,10},{60,25},{40,60},{70,100},
            {40,135},{-20,125},{-60,95},{-45,55},{-85,30},{-125,50},{-135,0},{-110,-50},
            {-60,-70},{-40,-105}} },
-    /* HARVEST: traced from the lap map of an autumn farm track (clockwise, point 0 = start line, lap ~2.0 km) */
-    { 54, {{-194,-243},{-157,-245},{-119,-245},{-82,-244},{-46,-235},{-9,-237},
-           {28,-245},{65,-248},{103,-248},{140,-248},{178,-248},{215,-248},
-           {253,-248},{287,-235},{304,-202},{310,-165},{310,-128},{305,-91},
-           {292,-56},{263,-34},{226,-33},{188,-33},{151,-33},{113,-33},
-           {76,-33},{39,-33},{1,-33},{-36,-33},{-73,-28},{-105,-8},
-           {-120,25},{-123,62},{-122,100},{-122,137},{-120,175},{-128,211},
-           {-150,240},{-186,248},{-219,232},{-248,209},{-276,184},{-299,154},
-           {-309,118},{-309,81},{-310,43},{-310,6},{-310,-32},{-310,-69},
-           {-310,-106},{-309,-144},{-308,-181},{-298,-217},{-269,-239},{-232,-244}} }
+    /* HARVEST: traced from the lap map of an autumn farm track (clockwise, point 0 = start line, lap ~1.7 km) */
+    { 46, {{-166,-206},{-128,-208},{-91,-208},{-54,-203},{-17,-199},{19,-207},
+           {57,-210},{94,-210},{132,-211},{169,-210},{206,-210},{242,-201},
+           {259,-169},{264,-132},{262,-94},{253,-58},{230,-30},{193,-27},
+           {156,-27},{118,-27},{81,-27},{44,-27},{6,-27},{-31,-27},
+           {-68,-21},{-96,3},{-105,39},{-104,76},{-105,113},{-103,151},
+           {-112,187},{-139,211},{-175,206},{-205,184},{-233,159},{-256,129},
+           {-263,93},{-264,56},{-264,18},{-264,-19},{-264,-57},{-264,-94},
+           {-263,-131},{-260,-169},{-239,-198},{-203,-207}} }
 };
 
 static const char *mapName[5] = { "STADIUM", "JUNKYARD", "FOREST", "CANYON", "HARVEST" };
@@ -197,7 +196,8 @@ static Car   cars[MAXC];
 static Obs   obs[MAXOBS];
 static void fmBuild(void);                 /* maps.h: roadside of RALLY FOREST and HARVEST */
 static int fmTrk;                           /* maps.h: 0 = RALLY FOREST, 1 = HARVEST */
-static int fmGround(float x,float z);       /* maps.h: HARVEST ground class under (x,z): 1 forest, 2 field, 3 river */
+static int fmGround(float x,float z);       /* maps.h: HARVEST ground class under (x,z): 1 forest, 2 field, 3 river, 4 yard */
+static float fmRampH(float x,float z);      /* maps.h: height of the little jump beside the covered bridge */
 static int grdKind=0;                       /* what the car is driving on beside the road: 0 normal, 2 field, 3 river */
 static void fmDraw(void);
 static void fmCollide(Car *c);
@@ -291,7 +291,7 @@ static void initPartTables(void)
 }
 
 typedef struct { int kind,life; float x,y,z,vx,vy,vz,rot,rotv,tilt,spin; short ha,hy,hb; unsigned char r,g,b; } Debris;   /* kind 0 = flat panel, 1 = wheel */
-#define MAXDB 16
+#define MAXDB 28
 static Debris dbr[MAXDB];
 static int dbrNext;
 
@@ -406,6 +406,17 @@ static void partsHit(Car *c,float raw,float a,float b,float nx,float nz)
 }
 
 /* ================================ TRACK ==================================== */
+/* HARVEST grain yard (lap fraction 0.775 .. 0.955): the open area is wider than the road.  mask 0 = normal road, 1 = full yard */
+static float yardMask(float s)
+{
+    float a;
+    if(s<=0.775f || s>=0.955f) return 0.0f;
+    if(s<0.815f) a=(s-0.775f)/0.04f; else if(s>0.915f) a=(0.955f-s)/0.04f; else a=1.0f;
+    return a*a*(3.0f-2.0f*a);
+}
+#define YARD_HW 20.0f
+static float yardHW(float s){ return HALFW+(YARD_HW-HALFW)*yardMask(s); }      /* half width of the open yard around the road centre */
+
 static void buildTrack(int which)
 {
     const TrackDef *td=&trackDefs[which];
@@ -482,6 +493,7 @@ static void buildTrack(int which)
                 u=ds*total/hill[q2][1]+0.5f;
                 if(u>0.0f && u<1.0f) h+=hill[q2][2]*0.5f*(1.0f-cosf(6.2832f*u));
             }
+            if(which==2) h*=1.0f-yardMask((float)i/(float)npts);              /* the yard is flat */
             if(h<-0.18f) h=-0.18f;                                   /* never sink to the level of the ground plane (-0.25): the road would flicker through it */
             roadH[i]=h;
         }
@@ -706,7 +718,7 @@ static float terrH(int i,float x,float z)             /* height of the ground at
     h=0.5f*((2.0f*h1)+(-h0+h2)*t+(2.0f*h0-5.0f*h1+4.0f*h2-h3)*t*t+(-h0+3.0f*h1-3.0f*h2+h3)*t*t*t);
     d=fabsf((x-roadX[i])*nrmX[i]+(z-roadZ[i])*nrmZ[i]);
     k=(d<=VERGE0)?1.0f:((d>=VERGE1)?0.0f:(VERGE1-d)/(VERGE1-VERGE0));
-    return h*k;
+    return h*k+((mapId==4)?fmRampH(x,z):0.0f);
 }
 
 static void sc2(float a,float *s,float *c)               /* sin / cos; polynomial for small angles (cheap on the DS) */
@@ -1261,7 +1273,7 @@ static void updatePlay(u32 held,u32 down)
             thr=c->aiThr; str=c->aiStr; nit=c->aiNit;
         }
         if(c->air||c->tumb) driveFree(c,c->air?0.9995f:0.965f);                   /* in the air or on its side / roof there are no tyre forces */
-        else{ grdKind=(mapId==4 && !onRoad)?fmGround(c->x,c->z):0; driveCar(c,thr,str,nit,hb,onRoad); }
+        else{ int gk=(mapId==4)?fmGround(c->x,c->z):0; if(gk==4) onRoad=1; grdKind=onRoad?0:gk; driveCar(c,thr,str,nit,hb,onRoad); }
         if(!c->air && !onRoad && (c->vlat>11.0f||c->vlat<-11.0f))                   /* sliding sideways on the verge trips the car */
             c->wr=clampf(c->wr-((c->vlat>0.0f)?1.0f:-1.0f)*(fabsf(c->vlat)-11.0f)*0.03f,-16.0f,16.0f);
         vertStep(c);
@@ -1348,18 +1360,18 @@ static void drawSky(float cx,float cz)
 /* HARVEST: autumn ground, painted by class: forest floor (leaves), yellow field, river.  16 m tiles, one texture pass per class */
 static void drawGroundH(float cx,float cz)
 {
-    static const unsigned char tx[4]={TX_DIRT,TX_DIRT,TX_SAND,TX_WHITE};
-    static const unsigned char tn[4][3]={{255,196,112},{255,196,112},{255,224,106},{66,116,172}};
+    static const unsigned char tx[5]={TX_DIRT,TX_DIRT,TX_SAND,TX_WHITE,TX_SAND};
+    static const unsigned char tn[5][3]={{255,196,112},{255,196,112},{255,224,106},{66,116,172},{244,218,150}};
     int ix0=(int)floorf(cx/16.0f), iz0=(int)floorf(cz/16.0f), i, j, pass;
-    for(pass=1;pass<=3;pass++){
+    for(pass=1;pass<=4;pass++){
         useTex(tx[pass]);
         for(j=iz0-6;j<=iz0+6;j++) for(i=ix0-6;i<=ix0+6;i++){
             int gk=fmGround((float)(i*16+8),(float)(j*16+8)), sh;
             if(gk==0) gk=1;
             if(gk!=pass) continue;
-            sh=(((i*7+j*13)&3)==0)?226:255;
+            sh=(((i*7+j*13)&3)==0)?228:255;
             glPushMatrix();
-            mtxT(inttof32(i*16+8),floattof32(-0.25f),inttof32(j*16+8));
+            mtxT(inttof32(i*16+8),floattof32(pass==4?-0.04f:-0.25f),inttof32(j*16+8));     /* the yard is level with the road */
             mtxS(inttof32(8),inttof32(1),inttof32(8));
             glBegin(QUADS_MODE);
             glColor3b(tn[pass][0]*sh/255,tn[pass][1]*sh/255,tn[pass][2]*sh/255);
@@ -1459,6 +1471,46 @@ static void drawGantry(void)
         mtxS(floattof32(0.3f),inttof32(3),floattof32(0.3f));
         unitBoxTex(255,255,255,UV(8),UV(32),UV(8));
         glPopMatrix(1);
+    }
+}
+
+/* HARVEST trees: deciduous (oak) with yellow / lime / golden leaves.  Flat-shaded camera-facing polygons, so no extra texture memory. */
+static void oakDraw(int tx,int ty,int tz,int sc,int var,int salt)
+{
+    static const unsigned char pal[4][3]={{198,208,54},{228,198,52},{170,200,58},{216,152,44}};
+    const unsigned char *c=pal[(var+(((salt>>2)&1)*2))&3];
+    int j1=(((salt*37)&7)-3)*260, j2=(((salt*91>>1)&7)-3)*260;
+#define OV(w,h) glVertex3v16(((w)*camRxi)>>12,(h),((w)*camRzi)>>12)
+#define OC(k) glColor3b(c[0]*(k)/100,c[1]*(k)/100,c[2]*(k)/100)
+    glPushMatrix();
+    mtxT(tx,ty,tz);
+    mtxS(sc,sc,sc);
+    glBegin(QUADS_MODE);
+    glColor3b(78,52,28);  OV(-1700,0);  OV(1700,0);
+    glColor3b(112,80,44); OV(1100,12000); OV(-1100,12000);                                  /* trunk */
+    OC(52); OV(-7000,9000);  OV(7400+j2,9000);
+    OC(80); OV(10200,14500); OV(-10000,14500);                                              /* crown, bottom band */
+    OC(80); OV(-10000,14500); OV(10200,14500);
+    OC(94); OV(10800,21000); OV(-10600+j1,21000);                                           /* crown, middle band */
+    OC(94); OV(-10600+j1,21000); OV(10800,21000);
+    OC(104); OV(6800+j2,27600); OV(-6200+j1,27200);                                         /* crown, top band */
+    glEnd();
+    glPopMatrix(1);
+#undef OV
+#undef OC
+}
+
+static void drawOakObs(void)                    /* the trees close to the road (they are solid) */
+{
+    int i;
+    useTex(TX_WHITE);
+    for(i=0;i<nobs;i++){
+        const Obs *o=&obs[i]; int dx,dz;
+        if(o->kind!=OB_TREE) continue;
+        dx=o->ix-camXi*16; dz=o->iz-camZi*16;
+        if(dx*dx+dz*dz>(treeCull*16)*(treeCull*16)) continue;
+        if(dx*camFxi+dz*camFzi< -6144) continue;
+        oakDraw(o->tx,0,o->tz,o->sc,o->var,o->ix);
     }
 }
 
@@ -2129,7 +2181,8 @@ static void render(void)
             drawRoad();
             drawGantry();
             if(IS_FM(mapId)) fmDraw();
-            drawBillboards(OB_TREE,mapId==3?TX_CACTUS:TX_PINE,mapId==3?K16(1.125f):K16(1.75f),mapId==3?K16(4.5f):K16(7.0f));
+            if(mapId==4) drawOakObs();
+            else drawBillboards(OB_TREE,mapId==3?TX_CACTUS:TX_PINE,mapId==3?K16(1.125f):K16(1.75f),mapId==3?K16(4.5f):K16(7.0f));
             if(mapId==3) drawBillboards(OB_ROCK,TX_ROCK,K16(1.6f),K16(1.6f));
         } else drawArena();
     }

@@ -50,70 +50,83 @@ static float fmSolid[2][MAXPTS];
 static unsigned int fmSeed;
 
 /* ---------- HARVEST ground classes (painted on the map by the author: forest / field / river), 16 m cells ---------- */
-#define FMG_COLS 60
-#define FMG_ROWS 50
+#define FMG_COLS 50
+#define FMG_ROWS 42
 #define FMG_CELL 16.0f
-#define FMG_X0   (-480.0f)
-#define FMG_Z0   (-400.0f)
+#define FMG_X0   (-400.0f)
+#define FMG_Z0   (-340.0f)
 static const unsigned char fmGrid[FMG_ROWS*FMG_COLS] = {
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,2,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,2,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,2,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,2,2,2,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,2,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,1,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    1,1,1,1,1,1,1,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    1,1,1,1,1,1,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
 };
-/* 1 = forest floor (trees), 2 = field (yellow, slows you down), 3 = river (blocks, slows a lot) */
+static unsigned char fmGridRT[FMG_ROWS*FMG_COLS];          /* the grid + the yard, filled by fmBuild */
+/* 1 = forest floor (trees), 2 = field (yellow, slows you down), 3 = river (blocks, slows a lot), 4 = open yard (like road) */
 static int fmGround(float x,float z)
 {
     int c=(int)floorf((x-FMG_X0)/FMG_CELL), r=(int)floorf((z-FMG_Z0)/FMG_CELL);
     if(c<0) c=0; else if(c>=FMG_COLS) c=FMG_COLS-1;
     if(r<0) r=0; else if(r>=FMG_ROWS) r=FMG_ROWS-1;
-    return fmGrid[r*FMG_COLS+c];
+    return fmGridRT[r*FMG_COLS+c];
+}
+
+/* where the fences stand: 9.2 m from the road centre, further out around the open yard */
+static float fmFO(int i)
+{
+    float w=fmTrk?yardHW((float)i/(float)npts):HALFW;
+    return (w>HALFW+0.01f)?(w+2.0f>9.2f?w+2.0f:9.2f):9.2f;
+}
+
+/* small jump beside the covered bridge (HARVEST): rises along the road, drops at the end */
+static int fmRampOn=0;
+static float fmRampX, fmRampZ, fmRampFx, fmRampFz, fmRampNx, fmRampNz, fmRampL;
+static float fmRampH(float x,float z)
+{
+    float dx,dz,u,v;
+    if(!fmRampOn) return 0.0f;
+    dx=x-fmRampX; dz=z-fmRampZ;
+    u=dx*fmRampFx+dz*fmRampFz; v=dx*fmRampNx+dz*fmRampNz;
+    if(u<0.0f || u>fmRampL || v<-2.0f || v>2.0f) return 0.0f;
+    return 1.15f*u/fmRampL;
 }
 
 /* ---------- breakable roadside: fence sections, cones and signs vanish when hit and give nitro ---------- */
@@ -267,11 +280,11 @@ static void fmSegQuads(int i,int sx,int type)
         fmUV(FL_ROCK,fl,&u0,&u1,&vb,&vt); fmAdd(FG_ATLAS,i,c,u0,u1,vb,vt,sh,sh,sh);
         break; }
     case FT_FWOOD:
-        fmP(c[0],i,sd,9.2f,0.0f); fmP(c[1],j,sd,9.2f,0.0f); fmP(c[2],j,sd,9.2f,1.3f); fmP(c[3],i,sd,9.2f,1.3f);
+        fmP(c[0],i,sd,fmFO(i),0.0f); fmP(c[1],j,sd,fmFO(j),0.0f); fmP(c[2],j,sd,fmFO(j),1.3f); fmP(c[3],i,sd,fmFO(i),1.3f);
         fmUV(FL_WOOD,0,&u0,&u1,&vb,&vt); fmBk=1+(sx?MAXPTS:0)+i; fmAdd(FG_ATLAS,i,c,u0,u1,vb,vt,255,255,255); fmBk=0;
         break;
     case FT_FMET:
-        fmP(c[0],i,sd,9.2f,0.0f); fmP(c[1],j,sd,9.2f,0.0f); fmP(c[2],j,sd,9.2f,2.4f); fmP(c[3],i,sd,9.2f,2.4f);
+        fmP(c[0],i,sd,fmFO(i),0.0f); fmP(c[1],j,sd,fmFO(j),0.0f); fmP(c[2],j,sd,fmFO(j),2.4f); fmP(c[3],i,sd,fmFO(i),2.4f);
         fmUV(FL_MET,0,&u0,&u1,&vb,&vt); fmBk=1+(sx?MAXPTS:0)+i; fmAdd(FG_ATLAS,i,c,u0,u1,vb,vt,255,255,255); fmBk=0;
         break;
     case FT_LOGS:
@@ -413,21 +426,23 @@ static void fmPlank(int i,int sd,float off,float ang,float len)
     fmUV(FL_LOG,0,&u0,&u1,&vb,&vt); fmAdd(FG_ATLAS,i,c,u0,u1,vb,vt,255,255,255);
 }
 
-/* grain silo: grey block with a darker band and cap */
+/* grain silo: riveted concrete block with a darker band and cap */
 static void fmSilo(float s,int sd,float off,float r,float h)
 {
     int i=fmIdx(s); float no=(float)sd*off;
-    fmBox(FG_FLAT,i,0.0f,no,r,r,0.0f,h,FM_F|FM_B|FM_L|FM_R|FM_T,-1,172,174,166);
+    fmBox(FG_ATLAS,i,0.0f,no,r,r,0.0f,h,FM_F|FM_B|FM_L|FM_R|FM_T,FL_CONC,205,200,188);
     fmBox(FG_FLAT,i,0.0f,no,r*1.04f,r*1.04f,h*0.60f,h*0.65f,FM_F|FM_B|FM_L|FM_R,-1,126,128,122);
     fmBox(FG_FLAT,i,0.0f,no,r*1.07f,r*1.07f,h,h+0.5f,FM_F|FM_B|FM_L|FM_R|FM_T,-1,118,120,114);
 }
 
-/* barn / shed: walls, gable roof along the road, dark door on the end wall facing the driver */
-static void fmBarnB(float s,int sd,float off,float hl,float hw,int wr,int wg,int wb,int rr,int rg,int rb)
+/* barn / shed: textured walls (planks or sheet metal), gable roof along the road, dark door on the end wall facing the driver.
+   tile = FL_LOG (wooden planks) or FL_CONC (sheet metal); wr,wg,wb tint the tile */
+static void fmBarnB(float s,int sd,float off,float hl,float hw,int tile,int wr,int wg,int wb,int rr,int rg,int rb)
 {
     int i=fmIdx(s); float c[4][3], fx=nrmZ[i], fz=-nrmX[i], nx=nrmX[i]*(float)sd, nz=nrmZ[i]*(float)sd;
     float cx=roadX[i]+nx*off, cz=roadZ[i]+nz*off, wh=4.6f, rh=7.0f, gb=fmGH(i,off);
-    fmBox(FG_FLAT,i,0.0f,(float)sd*off,hl,hw,0.0f,wh,FM_F|FM_B|FM_L|FM_R,-1,wr,wg,wb);
+    int ar=(tile==FL_LOG)?130:200, ag=(tile==FL_LOG)?90:196, ab=(tile==FL_LOG)?55:185;           /* average colour of the tile */
+    fmBox(FG_ATLAS,i,0.0f,(float)sd*off,hl,hw,0.0f,wh,FM_F|FM_B|FM_L|FM_R,tile,wr,wg,wb);
     c[0][0]=cx-nx*hw-fx*hl; c[0][1]=wh+gb; c[0][2]=cz-nz*hw-fz*hl;      /* roof, first slope */
     c[1][0]=cx-nx*hw+fx*hl; c[1][1]=wh+gb; c[1][2]=cz-nz*hw+fz*hl;
     c[2][0]=cx+fx*hl;       c[2][1]=rh+gb; c[2][2]=cz+fz*hl;
@@ -440,8 +455,8 @@ static void fmBarnB(float s,int sd,float off,float hl,float hw,int wr,int wg,int
     c[1][0]=cx+nx*hw+fx*hl; c[1][1]=wh+gb; c[1][2]=cz+nz*hw+fz*hl;
     c[2][0]=cx+fx*hl;       c[2][1]=rh+gb; c[2][2]=cz+fz*hl;
     c[3][0]=c[2][0];        c[3][1]=c[2][1]; c[3][2]=c[2][2];
-    fmFlat(i,c,wr*9/10,wg*9/10,wb*9/10);
-    fmFace(FG_FLAT,i,sd,off,hl+0.06f,hw*0.55f,0.0f,3.4f,0,0,40,36,34);  /* door */
+    fmFlat(i,c,wr*ar/255*9/10,wg*ag/255*9/10,wb*ab/255*9/10);
+    fmFace(FG_FLAT,i,sd,off,hl+0.06f,hw*0.55f,0.0f,3.4f,0,0,34,30,28);  /* door */
 }
 
 /* water tower: four legs, tank, roof */
@@ -490,40 +505,69 @@ static void fmBuildProps1(void)
     fmFace(FG_FLAT,fmIdx(0.327f),-1,12.5f,0.02f,0.18f,0.0f,2.8f,0,0,70,70,76);
     fmCones(0.305f,0.335f,-1,7.0f,0.0035f);
     /* ---- fields, red barn, closed-bridge sign, hay ---- */
-    fmBarnB(0.432f,1,27.0f,8.0f,6.0f,150,40,32,112,114,120);
-    fmFace(FG_FLAT,fmIdx(0.466f),-1,9.0f,0.0f,1.4f,1.2f,2.9f,0,0,226,226,220);    /* ROAD CLOSED board */
-    fmFace(FG_FLAT,fmIdx(0.466f),-1,9.0f,-0.04f,1.2f,2.1f,2.5f,0,0,200,50,40);
-    fmFace(FG_FLAT,fmIdx(0.466f),-1,9.0f,0.02f,0.10f,0.0f,1.2f,0,0,90,90,96);
+    fmBarnB(0.432f,1,27.0f,8.0f,6.0f,FL_LOG,255,100,84,112,114,120);
     for(s=0.528f;s<0.580f;s+=0.012f) fmSign(fmIdx(s),1,8.8f,FL_CHEV,1,0.7f,0.9f,2.4f);   /* left bend after the bridge: chevrons point left, on the right */
-    fmCones(0.440f,0.482f,-1,7.0f,0.0032f); fmCones(0.524f,0.565f,-1,7.0f,0.0032f);
     fmBox(FG_FLAT,fmIdx(0.452f),0.0f,11.0f,1.2f,1.0f,0.0f,1.3f,FM_F|FM_B|FM_L|FM_R|FM_T,-1,196,164,78);
     fmBox(FG_FLAT,fmIdx(0.456f),0.0f,12.5f,1.2f,1.0f,0.0f,1.3f,FM_F|FM_B|FM_L|FM_R|FM_T,-1,190,158,72);
     fmBox(FG_FLAT,fmIdx(0.454f),0.0f,11.6f,1.2f,1.0f,1.3f,2.6f,FM_F|FM_B|FM_L|FM_R|FM_T,-1,198,166,80);
-    /* ---- bridge over the river (the river is in fmGrid): concrete parapets on both sides ---- */
-    {   int b0=fmIdx(0.484f), b1=fmIdx(0.521f), bi;
-        for(bi=b0;bi<=b1;bi++){
-            fmBox(FG_ATLAS,bi,2.67f,-6.7f,2.7f,0.3f,0.0f,1.05f,FM_F|FM_B|FM_L|FM_R|FM_T,FL_CONC,196,192,182);
-            fmBox(FG_ATLAS,bi,2.67f, 6.7f,2.7f,0.3f,0.0f,1.05f,FM_F|FM_B|FM_L|FM_R|FM_T,FL_CONC,196,192,182);
+    /* ---- covered wooden bridge over the river (the river is in fmGrid), with a small jump on its left, as in the lap video ---- */
+    {   int bi, b0=-1, b1=-1, mid;
+        for(bi=0;bi<npts;bi++) if(fmGround(roadX[bi],roadZ[bi])==3){ if(b0<0) b0=bi; b1=bi; }
+        if(b0>=0){
+            int e, j;
+            mid=(b0+b1)/2;
+            for(bi=b0;bi<=b1;bi++){
+                if(bi>=mid-3 && bi<=mid+3){                                          /* the covered part: plank walls, roof, plank floor */
+                    fmBox(FG_ATLAS,bi,2.67f,-6.9f,2.7f,0.35f,0.0f,4.4f,FM_L|FM_R|FM_F|FM_B,FL_LOG,150,120,90);
+                    fmBox(FG_ATLAS,bi,2.67f, 6.9f,2.7f,0.35f,0.0f,4.4f,FM_L|FM_R|FM_F|FM_B,FL_LOG,150,120,90);
+                    fmBox(FG_FLAT,bi,2.67f,0.0f,2.7f,7.5f,4.4f,5.0f,63,-1,86,64,44);
+                    fmBox(FG_ATLAS,bi,2.67f,0.0f,2.7f,6.3f,0.0f,0.06f,FM_T,FL_LOG,205,160,110);
+                } else {                                                             /* open stretch: concrete parapets */
+                    fmBox(FG_ATLAS,bi,2.67f,-6.7f,2.7f,0.3f,0.0f,1.05f,FM_F|FM_B|FM_L|FM_R|FM_T,FL_CONC,196,192,182);
+                    fmBox(FG_ATLAS,bi,2.67f, 6.7f,2.7f,0.3f,0.0f,1.05f,FM_F|FM_B|FM_L|FM_R|FM_T,FL_CONC,196,192,182);
+                }
+            }
+            i=(b0+npts-8)%npts;                                                      /* ROAD CLOSED board before the bridge */
+            fmFace(FG_FLAT,i,-1,9.0f,0.0f,1.4f,1.2f,2.9f,0,0,226,226,220);
+            fmFace(FG_FLAT,i,-1,9.0f,-0.04f,1.2f,2.1f,2.5f,0,0,200,50,40);
+            fmFace(FG_FLAT,i,-1,9.0f,0.02f,0.10f,0.0f,1.2f,0,0,90,90,96);
+            fmCones(((float)((b0+npts-18)%npts))/(float)npts,((float)((b0+npts-2)%npts))/(float)npts,-1,7.0f,0.0032f);
+            /* jump: a wooden ramp left of the road just after the bridge, rising along the road, dropping at the end */
+            e=(b1+3)%npts; j=(e+1)%npts;
+            {   float len=sqrtf(seg2[e]), fx=(roadX[j]-roadX[e])/len, fz=(roadZ[j]-roadZ[e])/len, lx=-nrmX[e], lz=-nrmZ[e];
+                float ox=roadX[e]+lx*10.5f, oz=roadZ[e]+lz*10.5f, c[4][3]; int u0,u1,vb,vt;
+                fmRampX=ox; fmRampZ=oz; fmRampFx=fx; fmRampFz=fz; fmRampNx=lx; fmRampNz=lz; fmRampL=len; fmRampOn=1;
+                c[0][0]=ox-lx*2.0f;          c[0][1]=0.03f; c[0][2]=oz-lz*2.0f;                         /* top (planks) */
+                c[1][0]=ox+lx*2.0f;          c[1][1]=0.03f; c[1][2]=oz+lz*2.0f;
+                c[2][0]=ox+lx*2.0f+fx*len;   c[2][1]=1.18f; c[2][2]=oz+lz*2.0f+fz*len;
+                c[3][0]=ox-lx*2.0f+fx*len;   c[3][1]=1.18f; c[3][2]=oz-lz*2.0f+fz*len;
+                fmUV(FL_LOG,0,&u0,&u1,&vb,&vt); fmAdd(FG_ATLAS,e,c,u0,u1,vb,vt,225,185,150);
+                c[0][1]=-0.25f; c[1][1]=-0.25f; c[1][0]=ox-lx*2.0f+fx*len; c[1][2]=oz-lz*2.0f+fz*len; c[2][0]=c[1][0]; c[2][1]=1.18f; c[2][2]=c[1][2];
+                c[3][0]=c[2][0]; c[3][1]=c[2][1]; c[3][2]=c[2][2];
+                fmFlat(e,c,120,86,50);                                                              /* side wall */
+                c[0][0]=ox+lx*2.0f; c[0][1]=-0.25f; c[0][2]=oz+lz*2.0f; c[1][0]=ox+lx*2.0f+fx*len; c[1][1]=-0.25f; c[1][2]=oz+lz*2.0f+fz*len;
+                c[2][0]=c[1][0]; c[2][1]=1.18f; c[2][2]=c[1][2]; c[3][0]=c[2][0]; c[3][1]=c[2][1]; c[3][2]=c[2][2];
+                fmFlat(e,c,120,86,50);                                                              /* other side wall */
+                c[0][0]=ox-lx*2.0f+fx*len; c[0][1]=-0.25f; c[0][2]=oz-lz*2.0f+fz*len; c[1][0]=ox+lx*2.0f+fx*len; c[1][1]=-0.25f; c[1][2]=oz+lz*2.0f+fz*len;
+                c[2][0]=c[1][0]; c[2][1]=1.18f; c[2][2]=c[1][2]; c[3][0]=c[0][0]; c[3][1]=1.18f; c[3][2]=c[0][2];
+                fmFlat(e,c,96,66,38);                                                               /* the drop at the end */
+            }
         }
-        fmBox(FG_FLAT,b0,0.0f,-6.7f,0.4f,0.4f,0.0f,1.9f,63,-1,150,146,138);       /* end posts */
-        fmBox(FG_FLAT,b0,0.0f, 6.7f,0.4f,0.4f,0.0f,1.9f,63,-1,150,146,138);
-        fmBox(FG_FLAT,b1,5.3f,-6.7f,0.4f,0.4f,0.0f,1.9f,63,-1,150,146,138);
-        fmBox(FG_FLAT,b1,5.3f, 6.7f,0.4f,0.4f,0.0f,1.9f,63,-1,150,146,138);
     }
     /* ---- right hairpin ---- */
     for(s=0.622f;s<0.702f;s+=0.010f) fmSign(fmIdx(s),-1,8.8f,FL_CHEV,0,0.7f,0.9f,2.4f);
     fmCones(0.600f,0.700f,1,7.0f,0.0035f);
     fmPlank(fmIdx(0.662f),-1,3.0f,0.3f,1.7f); fmPlank(fmIdx(0.665f),-1,1.0f,-0.5f,1.9f);
     /* ---- grain yard on the left edge of the map (as in the lap video): silos, water towers, barns, steel pipe racks over the road ---- */
-    fmBarnB(0.795f,1,25.0f,9.0f,6.0f,150,40,32,226,228,232);              /* red barn, white roof */
-    fmBarnB(0.835f,1,27.0f,9.0f,7.5f,138,142,146,126,130,136);            /* big metal barn, open door */
-    fmBarnB(0.868f,1,28.0f,6.0f,5.0f,150,40,32,92,60,46);                 /* small red barn */
-    fmBarnB(0.915f,1,26.0f,8.0f,6.0f,140,128,110,98,86,72);               /* grey wooden barn */
-    fmBarnB(0.962f,1,28.0f,8.0f,6.0f,118,128,142,150,152,158);
-    fmSilo(0.772f,-1,17.0f,3.2f,12.0f); fmSilo(0.782f,-1,19.0f,3.4f,13.0f); fmSilo(0.792f,-1,17.5f,3.2f,12.0f);
+    fmBarnB(0.795f,1,34.0f,9.0f,6.0f,FL_LOG,255,100,84,226,228,232);        /* red barn, white roof */
+    fmBarnB(0.835f,1,36.0f,9.0f,7.5f,FL_CONC,150,170,196,126,130,136);      /* big metal barn, open door */
+    fmBarnB(0.868f,1,35.0f,6.0f,5.0f,FL_LOG,255,100,84,92,60,46);           /* small red barn */
+    fmBarnB(0.915f,1,33.0f,8.0f,6.0f,FL_LOG,232,226,218,98,86,72);          /* grey wooden barn */
+    fmBarnB(0.962f,1,28.0f,8.0f,6.0f,FL_CONC,172,182,198,150,152,158);
+    fmSilo(0.772f,-1,17.0f,3.2f,12.0f); fmSilo(0.782f,-1,19.0f,3.4f,13.0f); fmSilo(0.792f,-1,25.0f,3.2f,12.0f);
     fmWater(0.812f,-1,36.0f); fmWater(0.822f,-1,44.0f);
     fmHayTruck(0.858f,-1,14.5f);
-    fmSilo(0.905f,-1,20.0f,4.2f,14.0f); fmSilo(0.925f,-1,19.0f,3.8f,12.0f);
+    fmSilo(0.905f,-1,29.0f,4.2f,14.0f); fmSilo(0.925f,-1,25.0f,3.8f,12.0f);
     {   int rk;
         for(rk=0;rk<4;rk++){                                              /* pipe racks: legs, truss beam and yellow pipes across the road */
             int ri=fmIdx(0.838f+0.0105f*(float)rk);
@@ -680,7 +724,19 @@ static void fmBuild(void)
     int i,z,sx;
     fmSeed=fmTrk?0x51C3B7Du:0x2F6E1A9u; nfq=0; nft=0; nobs=0;
     fmZ=fmTrk?fmZones1:fmZones0; fmNZ=fmTrk?FM_NZONES1:FM_NZONES0;
-    fmBk=0; fmNSign=0; for(i=0;i<FM_BRKMAX;i++) fmBroken[i]=0;                  /* a new race: every fence and cone is back */
+    fmBk=0; fmNSign=0; fmRampOn=0; for(i=0;i<FM_BRKMAX;i++) fmBroken[i]=0;
+    for(i=0;i<FMG_ROWS*FMG_COLS;i++) fmGridRT[i]=fmGrid[i];
+    if(fmTrk){                                                      /* the open yard: every cell near the road in the yard stretch */
+        int pi,gr,gc;
+        for(pi=0;pi<npts;pi++){
+            float hw=yardHW((float)pi/(float)npts);
+            if(hw<HALFW+1.0f) continue;
+            for(gr=0;gr<FMG_ROWS;gr++) for(gc=0;gc<FMG_COLS;gc++){
+                float cx0=FMG_X0+((float)gc+0.5f)*FMG_CELL-roadX[pi], cz0=FMG_Z0+((float)gr+0.5f)*FMG_CELL-roadZ[pi];
+                if(cx0*cx0+cz0*cz0<hw*hw) fmGridRT[gr*FMG_COLS+gc]=4;
+            }
+        }
+    }                  /* a new race: every fence and cone is back */
     fmAcc[0]=0.0f;
     for(i=0;i<npts;i++) fmAcc[i+1]=fmAcc[i]+sqrtf(seg2[i]);
     /* 1. what stands beside each road segment */
@@ -730,6 +786,20 @@ static void fmInitTex(void)
 static void fmDrawTrees(int base)
 {
     int m,k,tw=texDefs[TX_PINE].w*16, th=texDefs[TX_PINE].h*16, hw=K16(1.75f), h=K16(7.0f);
+    if(fmTrk){                                                    /* HARVEST: oaks in yellow / lime leaves instead of pines */
+        useTex(TX_WHITE);
+        for(m=-FM_WBACK;m<=FM_WFWD;m++){
+            int i=(base+m+npts)%npts;
+            for(k=ftGS[i];k<ftGS[i+1];k++){
+                const FTree *t=&ft[ftOrd[k]];
+                int dx=(t->tx>>12)-camXi, dz=(t->tz>>12)-camZi;
+                if(dx*dx+dz*dz>62*62) continue;
+                if(dx*camFxi+dz*camFzi< -384) continue;
+                oakDraw(t->tx,t->ty,t->tz,t->sc,t->var,k);
+            }
+        }
+        return;
+    }
     useTex(TX_PINE);
     for(m=-FM_WBACK;m<=FM_WFWD;m++){
         int i=(base+m+npts)%npts;
@@ -780,17 +850,33 @@ static void fmDraw(void)
 }
 
 /* ---------------------------------- collision with the roadside ----------------------- */
+/* a knocked-down piece flies off with the physics of the car parts, and is gone after 5 seconds (keeps the DS memory free) */
+static void fmFly(float x,float y,float z,const Car *c,int sgn,int nx0,int nz0,int ha,int hy,int hb,int r,int g,int b)
+{
+    float out=3.0f+rndf()*4.0f;
+    spawnDebris(0,x,y,z,c->vx*0.7f+nrmX[nx0]*(float)sgn*out*0.5f+(rndf()-0.5f)*3.0f,3.0f+rndf()*3.5f,c->vz*0.7f+nrmZ[nz0]*(float)sgn*out*0.5f+(rndf()-0.5f)*3.0f,rndf()*6.28f,ha,hy,hb,r,g,b);
+    dbr[(dbrNext+MAXDB-1)%MAXDB].life=300;
+}
+
 static void fmBreakCheck(Car *c)
 {
-    int i=c->idx, sx, k, got=0;
+    int i=c->idx, sx, k, got=0, pieces=0;
     float d=(c->x-roadX[i])*nrmX[i]+(c->z-roadZ[i])*nrmZ[i];
     if(!c->alive) return;
     for(sx=0;sx<2;sx++){                                          /* fence: the three sections around the car go down */
         float dd=sx?d:-d; int t=fmBar[sx][i];
-        if((t==FT_FWOOD||t==FT_FMET) && dd>9.2f-c->cr-0.2f){
+        if((t==FT_FWOOD||t==FT_FMET) && dd>fmFO(i)-c->cr-0.2f){
             for(k=-1;k<=1;k++){
                 int j=(i+k+npts)%npts, id=1+(sx?MAXPTS:0)+j, tj=fmBar[sx][j];
-                if((tj==FT_FWOOD||tj==FT_FMET) && !fmBroken[id]){ fmBroken[id]=1; got+=6; }
+                if((tj==FT_FWOOD||tj==FT_FMET) && !fmBroken[id]){
+                    float fo=fmFO(j), sg=sx?1.0f:-1.0f;
+                    fmBroken[id]=1; got+=6;
+                    if(pieces<4){                                 /* two or three planks / mesh panels per section, at most 4 pieces per hit */
+                        int w=(tj==FT_FWOOD), q;
+                        for(q=0;q<2 && pieces<4;q++,pieces++)
+                            fmFly(roadX[j]+nrmX[j]*sg*fo,0.7f+rndf()*0.4f,roadZ[j]+nrmZ[j]*sg*fo,c,sx?1:-1,j,j,w?2800:2200,w?110:60,w?330:600,w?140:118,w?98:124,w?52:130);
+                    }
+                }
             }
         }
     }
@@ -800,14 +886,18 @@ static void fmBreakCheck(Car *c)
         if(ds>2 && ds<npts-2) continue;
         if(fmBroken[2*MAXPTS+1+k]) continue;
         dx=c->x-fsX[k]; dz=c->z-fsZ[k]; rr=c->cr+0.6f;
-        if(dx*dx+dz*dz<rr*rr){ fmBroken[2*MAXPTS+1+k]=1; got+=fsNit[k]; }
+        if(dx*dx+dz*dz<rr*rr){
+            fmBroken[2*MAXPTS+1+k]=1; got+=fsNit[k];
+            if(fsNit[k]==5) fmFly(fsX[k],0.5f,fsZ[k],c,1,i,i,480,740,480,255,120,24);               /* cone */
+            else            fmFly(fsX[k],1.0f,fsZ[k],c,1,i,i,1100,700,90,240,200,10);              /* sign board */
+        }
     }
     if(got>0){
         int q;
         c->nitro=clampf(c->nitro+(float)got,0.0f,100.0f);
         c->vx*=0.975f; c->vz*=0.975f;                              /* a small bump */
         for(q=0;q<4;q++) spawnPart(PT_DUST,c->x+(rndf()-0.5f)*2.0f,0.5f,c->z+(rndf()-0.5f)*2.0f,(rndf()-0.5f)*5.0f,1.5f+rndf()*2.0f,(rndf()-0.5f)*5.0f,0.5f);
-        if(&cars[playerIdx]==c) sndUi(1);
+        sndHit(3.0f,c->x,c->z);                                    /* a crack, not the nitro jingle */
     }
 }
 

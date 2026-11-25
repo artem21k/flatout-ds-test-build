@@ -207,7 +207,7 @@ static void fmAddOne(int g,int si,float c[4][3],int u0,int u1,int vb,int vt,int 
     if(nfq>=FM_QMAX) return;
     cx=0.25f*(c[0][0]+c[1][0]+c[2][0]+c[3][0]); cy=0.25f*(c[0][1]+c[1][1]+c[2][1]+c[3][1]); cz=0.25f*(c[0][2]+c[1][2]+c[2][2]+c[3][2]);
     if(fmTrk && g==FG_GRASS){                                    /* HARVEST is autumn: grass quads take the colour of the ground they lie on */
-        if(fmGround(cx,cz)==2){ gg=gg*226/255; b=b*110/255; } else { r=r*200/255; gg=gg*150/255; b=b*80/255; }
+        if(fmGround(cx,cz)==2){ gg=gg*252/255; b=b*120/255; } else { r=r*255/255; gg=gg*222/255; b=b*92/255; }
     }
     q=&fq[nfq]; fqG[nfq]=(unsigned char)g; fqS[nfq]=(short)si; fqB[nfq]=(unsigned short)fmBk; nfq++;
     q->tx=floattof32(cx); q->ty=floattof32(cy); q->tz=floattof32(cz);
@@ -353,7 +353,7 @@ static void fmSign(int i,int sd,float off,int tile,int flip,float w,float y0,flo
     int keep=fmBk;
     if(fmNSign<FM_NSIGN){                                        /* every sign and cone can be knocked down for a little nitro */
         fsX[fmNSign]=roadX[i]+nrmX[i]*(float)sd*off; fsZ[fmNSign]=roadZ[i]+nrmZ[i]*(float)sd*off;
-        fsS[fmNSign]=(short)i; fsNit[fmNSign]=(unsigned char)(tile==FL_CONE?5:6);
+        fsS[fmNSign]=(short)i; fsNit[fmNSign]=(unsigned char)(tile==FL_CONE?2:3);
         fmBk=2*MAXPTS+1+fmNSign; fmNSign++;
     }
     fmFace(FG_ATLAS,i,sd,off,0.0f,w,y0,y1,tile,flip,255,255,255);
@@ -459,6 +459,31 @@ static void fmBarnB(float s,int sd,float off,float hl,float hw,int tile,int wr,i
     fmFace(FG_FLAT,i,sd,off,hl+0.06f,hw*0.55f,0.0f,3.4f,0,0,34,30,28);  /* door */
 }
 
+/* flat quad on the road-side wall of a barn (windows, doors): off = distance of the wall plane from the road centre, f0..f1 along the road */
+static void fmWallQ(int i,int sd,float off,float f0,float f1,float y0,float y1,int r,int g,int b)
+{
+    float c[4][3], fx=nrmZ[i], fz=-nrmX[i], nx=nrmX[i]*(float)sd, nz=nrmZ[i]*(float)sd, gb=fmGH(i,off);
+    float px=roadX[i]+nx*off, pz=roadZ[i]+nz*off;
+    c[0][0]=px+fx*f0; c[0][1]=y0+gb; c[0][2]=pz+fz*f0;
+    c[1][0]=px+fx*f1; c[1][1]=y0+gb; c[1][2]=pz+fz*f1;
+    c[2][0]=px+fx*f1; c[2][1]=y1+gb; c[2][2]=pz+fz*f1;
+    c[3][0]=px+fx*f0; c[3][1]=y1+gb; c[3][2]=pz+fz*f0;
+    fmFlat(i,c,r,g,b);
+}
+
+/* the long grey plank barn of the screenshots: stone base, windows with white frames, a red door */
+static void fmBarnDress(float s,int sd,float off,float hl,float hw)
+{
+    int i=fmIdx(s), k; float wall=off-hw-0.16f, f;
+    fmBox(FG_ATLAS,i,0.0f,(float)sd*off,hl+0.12f,hw+0.12f,0.0f,1.25f,FM_F|FM_B|FM_L|FM_R|FM_T,FL_ROCK,176,170,150);
+    for(k=0;k<4;k++){
+        f=-hl*0.70f+hl*0.46f*(float)k;
+        fmWallQ(i,sd,wall,f-1.15f,f+1.15f,1.85f,3.55f,214,210,200);          /* frame */
+        fmWallQ(i,sd,wall-0.04f,f-0.95f,f+0.95f,2.05f,3.35f,34,42,52);       /* glass */
+    }
+    fmWallQ(i,sd,wall,hl*0.82f-1.2f,hl*0.82f+1.2f,1.25f,3.7f,150,44,30);     /* red door */
+}
+
 /* water tower: four legs, tank, roof */
 static void fmWater(float s,int sd,float off)
 {
@@ -521,7 +546,7 @@ static void fmBuildProps1(void)
                     fmBox(FG_ATLAS,bi,2.67f,-6.9f,2.7f,0.35f,0.0f,4.4f,FM_L|FM_R|FM_F|FM_B,FL_LOG,150,120,90);
                     fmBox(FG_ATLAS,bi,2.67f, 6.9f,2.7f,0.35f,0.0f,4.4f,FM_L|FM_R|FM_F|FM_B,FL_LOG,150,120,90);
                     fmBox(FG_FLAT,bi,2.67f,0.0f,2.7f,7.5f,4.4f,5.0f,63,-1,86,64,44);
-                    fmBox(FG_ATLAS,bi,2.67f,0.0f,2.7f,6.3f,0.0f,0.06f,FM_T,FL_LOG,205,160,110);
+                    fmBox(FG_ATLAS,bi,2.67f,0.0f,2.7f,6.3f,0.0f,0.14f,FM_T,FL_LOG,205,160,110);
                 } else {                                                             /* open stretch: concrete parapets */
                     fmBox(FG_ATLAS,bi,2.67f,-6.7f,2.7f,0.3f,0.0f,1.05f,FM_F|FM_B|FM_L|FM_R|FM_T,FL_CONC,196,192,182);
                     fmBox(FG_ATLAS,bi,2.67f, 6.7f,2.7f,0.3f,0.0f,1.05f,FM_F|FM_B|FM_L|FM_R|FM_T,FL_CONC,196,192,182);
@@ -558,25 +583,27 @@ static void fmBuildProps1(void)
     for(s=0.622f;s<0.702f;s+=0.010f) fmSign(fmIdx(s),-1,8.8f,FL_CHEV,0,0.7f,0.9f,2.4f);
     fmCones(0.600f,0.700f,1,7.0f,0.0035f);
     fmPlank(fmIdx(0.662f),-1,3.0f,0.3f,1.7f); fmPlank(fmIdx(0.665f),-1,1.0f,-0.5f,1.9f);
-    /* ---- grain yard on the left edge of the map (as in the lap video): silos, water towers, barns, steel pipe racks over the road ---- */
-    fmBarnB(0.795f,1,34.0f,9.0f,6.0f,FL_LOG,255,100,84,226,228,232);        /* red barn, white roof */
-    fmBarnB(0.835f,1,36.0f,9.0f,7.5f,FL_CONC,150,170,196,126,130,136);      /* big metal barn, open door */
-    fmBarnB(0.868f,1,35.0f,6.0f,5.0f,FL_LOG,255,100,84,92,60,46);           /* small red barn */
-    fmBarnB(0.915f,1,33.0f,8.0f,6.0f,FL_LOG,232,226,218,98,86,72);          /* grey wooden barn */
-    fmBarnB(0.962f,1,28.0f,8.0f,6.0f,FL_CONC,172,182,198,150,152,158);
-    fmSilo(0.772f,-1,17.0f,3.2f,12.0f); fmSilo(0.782f,-1,19.0f,3.4f,13.0f); fmSilo(0.792f,-1,25.0f,3.2f,12.0f);
-    fmWater(0.812f,-1,36.0f); fmWater(0.822f,-1,44.0f);
-    fmHayTruck(0.858f,-1,14.5f);
-    fmSilo(0.905f,-1,29.0f,4.2f,14.0f); fmSilo(0.925f,-1,25.0f,3.8f,12.0f);
+    /* ---- grain yard (lap video + screenshots): the barns and the steel pipe racks stand on the LEFT, silos on the right ---- */
+    fmBarnB(0.800f,-1,33.0f,13.0f,6.0f,FL_LOG,232,226,218,98,86,72); fmBarnDress(0.800f,-1,33.0f,13.0f,6.0f);   /* long grey plank barn */
+    fmBarnB(0.848f,-1,36.0f,9.0f,7.5f,FL_CONC,150,170,196,126,130,136);       /* big metal barn, open door */
+    fmBarnB(0.888f,-1,34.0f,9.0f,6.0f,FL_LOG,255,100,84,226,228,232);         /* red barn, white roof */
+    fmBarnB(0.926f,-1,30.0f,6.0f,5.0f,FL_LOG,255,100,84,92,60,46);            /* small red barn */
+    fmBarnB(0.962f,-1,28.0f,8.0f,6.0f,FL_CONC,172,182,198,150,152,158);
+    fmSilo(0.772f,-1,17.0f,3.2f,12.0f); fmSilo(0.782f,-1,19.0f,3.4f,13.0f);
+    fmWater(0.822f,-1,48.0f); fmWater(0.866f,-1,54.0f);
+    fmHayTruck(0.866f,-1,26.0f);
+    fmSilo(0.790f,1,29.0f,4.2f,15.0f); fmSilo(0.801f,1,30.0f,4.2f,15.0f); fmSilo(0.812f,1,28.0f,4.0f,14.0f);
+    fmSilo(0.868f,1,30.0f,4.4f,15.0f); fmSilo(0.880f,1,28.5f,4.0f,13.0f); fmSilo(0.906f,1,27.0f,3.8f,12.0f);
     {   int rk;
-        for(rk=0;rk<4;rk++){                                              /* pipe racks: legs, truss beam and yellow pipes across the road */
+        for(rk=0;rk<4;rk++){                                              /* pipe racks: lattice columns on the left, truss beam and yellow pipes over the road */
             int ri=fmIdx(0.838f+0.0105f*(float)rk);
-            fmBox(FG_FLAT,ri,0.0f,-9.8f,0.5f,0.5f,0.0f,7.0f,63,-1,58,54,48);
-            fmBox(FG_FLAT,ri,0.0f, 9.8f,0.5f,0.5f,0.0f,7.0f,63,-1,58,54,48);
-            fmBox(FG_FLAT,ri,0.0f,0.0f,0.35f,10.0f,6.5f,7.1f,63,-1,66,62,56);
-            fmBox(FG_FLAT,ri,0.0f, 0.0f,5.2f,0.35f,5.0f,5.6f,63,-1,182,152,70);
-            fmBox(FG_FLAT,ri,0.0f,-3.5f,5.2f,0.30f,5.8f,6.3f,63,-1,176,146,66);
-            fmBox(FG_FLAT,ri,0.0f, 3.5f,5.2f,0.30f,5.8f,6.3f,63,-1,176,146,66);
+            fmBox(FG_FLAT,ri,-1.3f,-19.5f,0.45f,0.45f,0.0f,7.2f,63,-1,58,54,48);
+            fmBox(FG_FLAT,ri, 1.3f,-19.5f,0.45f,0.45f,0.0f,7.2f,63,-1,58,54,48);
+            fmBox(FG_FLAT,ri, 0.0f,-19.5f,0.25f,0.25f,3.2f,3.5f,63,-1,66,62,56);
+            fmBox(FG_FLAT,ri, 0.0f,-6.0f,0.35f,13.5f,6.5f,7.1f,63,-1,66,62,56);   /* beam from the columns over the road */
+            fmBox(FG_FLAT,ri, 0.0f,-14.0f,5.2f,0.35f,5.0f,5.6f,63,-1,182,152,70);
+            fmBox(FG_FLAT,ri, 0.0f,-9.0f,5.2f,0.30f,5.8f,6.3f,63,-1,176,146,66);
+            fmBox(FG_FLAT,ri, 0.0f,-3.5f,5.2f,0.30f,5.8f,6.3f,63,-1,176,146,66);
         }
     }
     fmCones(0.805f,0.870f,1,7.0f,0.0035f);
@@ -870,7 +897,7 @@ static void fmBreakCheck(Car *c)
                 int j=(i+k+npts)%npts, id=1+(sx?MAXPTS:0)+j, tj=fmBar[sx][j];
                 if((tj==FT_FWOOD||tj==FT_FMET) && !fmBroken[id]){
                     float fo=fmFO(j), sg=sx?1.0f:-1.0f;
-                    fmBroken[id]=1; got+=6;
+                    fmBroken[id]=1; got+=3;
                     if(pieces<4){                                 /* two or three planks / mesh panels per section, at most 4 pieces per hit */
                         int w=(tj==FT_FWOOD), q;
                         for(q=0;q<2 && pieces<4;q++,pieces++)
@@ -888,7 +915,7 @@ static void fmBreakCheck(Car *c)
         dx=c->x-fsX[k]; dz=c->z-fsZ[k]; rr=c->cr+0.6f;
         if(dx*dx+dz*dz<rr*rr){
             fmBroken[2*MAXPTS+1+k]=1; got+=fsNit[k];
-            if(fsNit[k]==5) fmFly(fsX[k],0.5f,fsZ[k],c,1,i,i,480,740,480,255,120,24);               /* cone */
+            if(fsNit[k]==2) fmFly(fsX[k],0.5f,fsZ[k],c,1,i,i,480,740,480,255,120,24);               /* cone */
             else            fmFly(fsX[k],1.0f,fsZ[k],c,1,i,i,1100,700,90,240,200,10);              /* sign board */
         }
     }

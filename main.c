@@ -1360,8 +1360,8 @@ static void drawSky(float cx,float cz)
 /* HARVEST: autumn ground, painted by class: forest floor (leaves), yellow field, river.  16 m tiles, one texture pass per class */
 static void drawGroundH(float cx,float cz)
 {
-    static const unsigned char tx[5]={TX_DIRT,TX_DIRT,TX_SAND,TX_WHITE,TX_SAND};
-    static const unsigned char tn[5][3]={{255,196,112},{255,196,112},{255,224,106},{66,116,172},{244,218,150}};
+    static const unsigned char tx[5]={TX_SAND,TX_SAND,TX_SAND,TX_WHITE,TX_SAND};
+    static const unsigned char tn[5][3]={{255,222,92},{255,222,92},{255,252,120},{66,116,172},{248,224,150}};   /* forest floor: golden, field: bright yellow, river, yard */
     int ix0=(int)floorf(cx/16.0f), iz0=(int)floorf(cz/16.0f), i, j, pass;
     for(pass=1;pass<=4;pass++){
         useTex(tx[pass]);
@@ -1371,7 +1371,7 @@ static void drawGroundH(float cx,float cz)
             if(gk!=pass) continue;
             sh=(((i*7+j*13)&3)==0)?228:255;
             glPushMatrix();
-            mtxT(inttof32(i*16+8),floattof32(pass==4?-0.04f:-0.25f),inttof32(j*16+8));     /* the yard is level with the road */
+            mtxT(inttof32(i*16+8),floattof32(pass==4?-0.12f:-0.25f),inttof32(j*16+8));     /* the yard is level with the road */
             mtxS(inttof32(8),inttof32(1),inttof32(8));
             glBegin(QUADS_MODE);
             glColor3b(tn[pass][0]*sh/255,tn[pass][1]*sh/255,tn[pass][2]*sh/255);
@@ -1477,7 +1477,7 @@ static void drawGantry(void)
 /* HARVEST trees: deciduous (oak) with yellow / lime / golden leaves.  Flat-shaded camera-facing polygons, so no extra texture memory. */
 static void oakDraw(int tx,int ty,int tz,int sc,int var,int salt)
 {
-    static const unsigned char pal[4][3]={{198,208,54},{228,198,52},{170,200,58},{216,152,44}};
+    static const unsigned char pal[4][3]={{232,232,62},{252,226,56},{204,230,62},{246,186,50}};     /* bright yellow, golden, lime, amber */
     const unsigned char *c=pal[(var+(((salt>>2)&1)*2))&3];
     int j1=(((salt*37)&7)-3)*260, j2=(((salt*91>>1)&7)-3)*260;
 #define OV(w,h) glVertex3v16(((w)*camRxi)>>12,(h),((w)*camRzi)>>12)
@@ -1488,12 +1488,12 @@ static void oakDraw(int tx,int ty,int tz,int sc,int var,int salt)
     glBegin(QUADS_MODE);
     glColor3b(78,52,28);  OV(-1700,0);  OV(1700,0);
     glColor3b(112,80,44); OV(1100,12000); OV(-1100,12000);                                  /* trunk */
-    OC(52); OV(-7000,9000);  OV(7400+j2,9000);
-    OC(80); OV(10200,14500); OV(-10000,14500);                                              /* crown, bottom band */
-    OC(80); OV(-10000,14500); OV(10200,14500);
-    OC(94); OV(10800,21000); OV(-10600+j1,21000);                                           /* crown, middle band */
-    OC(94); OV(-10600+j1,21000); OV(10800,21000);
-    OC(104); OV(6800+j2,27600); OV(-6200+j1,27200);                                         /* crown, top band */
+    OC(64); OV(-7000,9000);  OV(7400+j2,9000);
+    OC(88); OV(10200,14500); OV(-10000,14500);                                              /* crown, bottom band */
+    OC(88); OV(-10000,14500); OV(10200,14500);
+    OC(96); OV(10800,21000); OV(-10600+j1,21000);                                           /* crown, middle band */
+    OC(96); OV(-10600+j1,21000); OV(10800,21000);
+    OC(100); OV(6800+j2,27600); OV(-6200+j1,27200);                                         /* crown, top band */
     glEnd();
     glPopMatrix(1);
 #undef OV

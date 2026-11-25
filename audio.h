@@ -68,7 +68,7 @@ static int sfxAt(int id,float wx,float wz,float vol,float maxD)
 static void sndEngine(const Car *p,int on,int gas)
 {
     float f, target;
-    int id=(p->model==GT_MODEL)?SFX_ENGINE_BARRACUDA:SFX_ENGINE_CHARGER;
+    int id=SFX_ENGINE_0+(p->model&7);                    /* every car has its own engine loop (sounds.h, made by gen_engines.py) */
     if(!on||!sndOn){ sndEngineStop(); engSfx=-1; return; }
     if(engineCh>=0 && engSfx!=id){ sndEngineStop(); }
     if(engineCh<0){ engSfx=id; engineCh=sfxPlay(id,ENG_VOL_IDLE,64,100); }
@@ -385,4 +385,3 @@ static void sndGameStop(void){}
 static void banUpdate(void){}
 static void banRelease(void){}
 #endif
-

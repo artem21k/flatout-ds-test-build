@@ -73,11 +73,10 @@ static void sndEngine(const Car *p,int on,int gas)
     if(engineCh>=0 && engSfx!=id){ sndEngineStop(); }
     if(engineCh<0){ engSfx=id; engineCh=sfxPlay(id,ENG_VOL_IDLE,64,100); }
     if(engineCh<0) return;
-    f=fabsf(p->spd)/(MAXSPD*p->kTop);
-    target=clampf(f,0.0f,1.0f);
-    if(gas && target<0.35f) target=0.35f;               /* rev up on the pedal even when standing */
-    if(p->nitroOn) target+=0.2f;
-    engRpm+=(target-engRpm)*0.15f;
+    target=clampf(p->rpm,0.0f,1.0f);                    /* the revs come from the gearbox: they saw-tooth with every shift */
+    if(gas && target<0.40f) target=0.40f;               /* rev up on the pedal even when standing */
+    if(p->nitroOn) target+=0.15f;
+    engRpm+=(target-engRpm)*0.28f;
     if((frameNo&1)==0){
         soundSetFreq(engineCh,(int)((float)sndDefs[id].rate*(0.85f+1.4f*clampf(engRpm,0.0f,1.3f))));   /* 0.85x idle .. 2.7x max (< 32 kHz) */
         soundSetVolume(engineCh,(int)((float)ENG_VOL_IDLE+(float)(ENG_VOL_MAX-ENG_VOL_IDLE)*clampf(engRpm,0.0f,1.0f))*sfxVol/10);
@@ -158,9 +157,10 @@ static void sndDrive(const Car *p,int active)
 
     /* skid loop: sideways slip (handbrake / hard cornering) */
     slip=fabsf(p->vx*p->cs+p->vz*p->sn);
-    if(skidCh<0 && spd>6.0f && slip>4.0f) skidCh=sfxPlay(SFX_ASPHALT_SKID_2,0,64,100);
+    if(p->spin>0.4f) slip+=8.0f*p->spin;                                   /* spinning wheels squeal too */
+    if(skidCh<0 && (spd>6.0f||p->spin>0.4f) && slip>4.0f) skidCh=sfxPlay(SFX_ASPHALT_SKID_2,0,64,100);
     if(skidCh>=0){
-        if(spd<4.0f || slip<2.0f) sndLoopStop(&skidCh);
+        if((spd<4.0f && p->spin<0.3f) || slip<2.0f) sndLoopStop(&skidCh);
         else if((frameNo%3)==0) soundSetVolume(skidCh,(int)clampf(slip*9.0f,0.0f,85.0f)*sfxVol/10);
     }
 
@@ -173,8 +173,9 @@ static void sndDrive(const Car *p,int active)
     lastNitro=nit;
 
     /* gear shift on the way up */
-    gear=(int)(spd/(p->vtop*0.2f)); if(gear>5) gear=5;
-    if(gear>lastGear && gearCool<=0){ sfxPlay(SFX_GEARSHIFT_1,55,64,100); gearCool=25; }
+    gear=p->gear;
+    if(gear>lastGear && lastGear>0 && gearCool<=0){ sfxPlay(SFX_GEARSHIFT_1,55,64,100); gearCool=12; }
+    else if(gear<lastGear && lastGear>0 && gearCool<=0){ sfxPlay(SFX_GEARSHIFT_1,30,64,100); gearCool=12; }
     lastGear=gear;
 
     /* radiator steam when the car is badly damaged */
@@ -385,3 +386,4 @@ static void sndGameStop(void){}
 static void banUpdate(void){}
 static void banRelease(void){}
 #endif
+

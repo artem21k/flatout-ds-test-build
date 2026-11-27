@@ -17,8 +17,8 @@ static int engineCh=-1;                    /* engine loop                       
 static int rollCh=-1, rollSfx=-1, skidCh=-1, nitroCh=-1;     /* looping sample channels (player)   */
 static int crashCool, voiceCool, gearCool, lastGear, lastNitro, engSfx=-1;
 static float engRpm;                                          /* smoothed engine speed 0..1.3 */
-#define ENG_VOL_IDLE 8                                       /* engine volume 0..127 at idle (quiet)      */
-#define ENG_VOL_MAX  22                                      /* ... at full revs; raise if too quiet       */
+#define ENG_VOL_IDLE 30                                       /* engine volume 0..127 at idle (quiet)      */
+#define ENG_VOL_MAX  78                                      /* ... at full revs; raise if too quiet       */
 #define GT_MODEL 4                                           /* carDefs[4] = BULLET GT -> Plymouth V8, all other cars -> Charger V8 */
 
 static void sndInit(void)
@@ -27,11 +27,13 @@ static void sndInit(void)
     soundEnable();
     for(i=0;i<SFX_COUNT;i++) DC_FlushRange((void*)sndDefs[i].data,(u32)sndDefs[i].len);
 }
+static int prevCh=-1, prevT=0, prevId=0;      /* garage: engine preview */
 static void sndEngineStop(void){ if(engineCh>=0){ soundKill(engineCh); engineCh=-1; } }
 static void sndLoopStop(int *ch){ if(*ch>=0){ soundKill(*ch); *ch=-1; } }
 static void sndGameStop(void)               /* engine, rolling, skid, nitro - NOT the music */
 {
     sndEngineStop();
+    if(prevCh>=0){ soundKill(prevCh); prevCh=-1; }
     sndLoopStop(&rollCh); rollSfx=-1;
     sndLoopStop(&skidCh);
     sndLoopStop(&nitroCh);
@@ -64,7 +66,10 @@ static int sfxAt(int id,float wx,float wz,float vol,float maxD)
     return sfxPlay(id,(int)(vol*(1.0f-d/maxD)),64+(int)clampf(lat*2.5f,-50.0f,50.0f),100);
 }
 
-/* engine: one steady idle loop per engine, pitched up with speed (and a little with the gas pedal / nitro) */
+/* how far each engine is revved up: top of the pitch range x100 (the DS sound chip stops at 32 kHz, the loops are 11025 Hz) */
+static const unsigned char engHi[8]={235,250,245,280,265,240,205,285};   /* ROAMER MALICE NEVADA INSETTA BULLET GT CANYON TRUCK FLATMOBILE */
+
+/* engine: one steady idle loop per engine, pitched up with the revs (and a little with the gas pedal / nitro) */
 static void sndEngine(const Car *p,int on,int gas)
 {
     float f, target;
@@ -78,9 +83,28 @@ static void sndEngine(const Car *p,int on,int gas)
     if(p->nitroOn) target+=0.15f;
     engRpm+=(target-engRpm)*0.28f;
     if((frameNo&1)==0){
-        soundSetFreq(engineCh,(int)((float)sndDefs[id].rate*(0.85f+1.4f*clampf(engRpm,0.0f,1.3f))));   /* 0.85x idle .. 2.7x max (< 32 kHz) */
+        soundSetFreq(engineCh,(int)((float)sndDefs[id].rate*(0.85f+((float)engHi[p->model&7]*0.01f-0.85f)*clampf(engRpm,0.0f,1.3f))));   /* 0.85x idle .. this engine's top (< 32 kHz) */
         soundSetVolume(engineCh,(int)((float)ENG_VOL_IDLE+(float)(ENG_VOL_MAX-ENG_VOL_IDLE)*clampf(engRpm,0.0f,1.0f))*sfxVol/10);
     }
+}
+
+/* garage: hear the engine of the car you pick - a short rev up and down (also proves which engine sounds are in the ROM) */
+static void sndEnginePreview(int model)
+{
+    if(!sndOn||sfxVol<=0) return;
+    if(prevCh>=0){ soundKill(prevCh); prevCh=-1; }
+    prevId=SFX_ENGINE_0+(model&7); prevT=80;
+    prevCh=sfxPlay(prevId,70,64,100);
+}
+static void sndPreviewTick(int model)
+{
+    float k, rv;
+    if(prevCh<0) return;
+    if(prevT<=0){ soundKill(prevCh); prevCh=-1; return; }
+    k=(float)prevT/80.0f; rv=(k>0.5f)?(1.0f-k)*2.0f:k*2.0f;                    /* 0 -> 1 -> 0 */
+    soundSetFreq(prevCh,(int)((float)sndDefs[prevId].rate*(0.9f+((float)engHi[model&7]*0.01f-0.9f)*rv)));
+    soundSetVolume(prevCh,(int)(45.0f+45.0f*rv)*sfxVol/10);
+    prevT--;
 }
 
 /* crash / impact: sample depends on what was hit and how hard */
@@ -370,6 +394,8 @@ static void musApply(void){}
 static void sndEngineStop(void){}
 static void sndAllStop(void){}
 static void sndEngine(const Car *p,int on,int gas){ (void)p;(void)on;(void)gas; }
+static void sndEnginePreview(int model){ (void)model; }
+static void sndPreviewTick(int model){ (void)model; }
 static void sndHit(float dmg,float x,float z){ (void)dmg;(void)x;(void)z; }
 static void sndVoice(int kind){ (void)kind; }
 static void sndWreck(float x,float z,int isPlayer){ (void)x;(void)z;(void)isPlayer; }

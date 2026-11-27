@@ -35,6 +35,11 @@ jobs:
 
           rm -f proj/source/*
           for f in main.c audio.h textures.h cars.h sounds.h images.h carimgs.h maps.h forestatlas.h mappics.h menuroom.h; do
+            if [ -f "source/$f" ] && [ -f "$f" ] && ! cmp -s "source/$f" "$f"; then
+              echo "ERROR: $f exists BOTH in source/ and in the repository root with DIFFERENT content."
+              echo "       Delete one of the two copies (the build used to take source/ silently, so an updated root file was ignored)."
+              exit 1
+            fi
             if [ -f "source/$f" ]; then
               cp "source/$f" proj/source/
             elif [ -f "$f" ]; then
@@ -44,6 +49,13 @@ jobs:
               exit 1
             fi
           done
+          # stale file from older versions that would otherwise be ignored: warn
+          if [ -f forestmap.h ] || [ -f source/forestmap.h ]; then echo "NOTE: forestmap.h is no longer used (renamed to maps.h) - you can delete it."; fi
+          # show the CI run number on the main menu (bottom right) so you can see which build is running on the DS
+          sed -i "s/BUILD 8/RUN ${GITHUB_RUN_NUMBER:-0}/" proj/source/main.c
+          echo "=== FILES USED (sha1) ==="
+          ( cd proj/source && sha1sum main.c audio.h sounds.h cars.h maps.h )
+          grep -c "SFX_ENGINE_7" proj/source/sounds.h || true
 
           echo "=== PREPARE NITROFS MUSIC ==="
           mkdir -p proj/nitrofiles/music
@@ -113,6 +125,6 @@ jobs:
       - name: Upload NDS artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Flatout-DS
+          name: Flatout-DS-run${{ github.run_number }}
           path: proj/Flatout-DS.nds
           if-no-files-found: error

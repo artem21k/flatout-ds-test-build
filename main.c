@@ -2789,6 +2789,7 @@ static void hudMain(void)
     }
     hShadowC(112,b,COL_CREAM,1);
     for(i=0;i<3;i++) hButton(61+i*50,122,i==mainSel,mainIcon[i]);
+    htextS(196,181,"BUILD 8",C15(150,150,150),1);                    /* so you can see which version is running */
     hrect(0,158,256,11,C15(20,15,8));                               /* label strip */
     hline(0,158,255,158,C15(120,80,10)); hline(0,168,255,168,C15(120,80,10));
     w=htextW(mainName[mainSel],1);
@@ -3195,8 +3196,8 @@ static void menuTouch(int tx,int ty)
         }
     } else if(menuScr==SC_CAR){
         if(ty>=128&&ty<166){                                         /* tap the neighbouring icon (or an arrow) to scroll */
-            if(tx<90){ carSel=(carSel+NCARDEF-1)%NCARDEF; sndUi(0); hudTimer=0; }
-            else if(tx>=166){ carSel=(carSel+1)%NCARDEF; sndUi(0); hudTimer=0; }
+            if(tx<90){ carSel=(carSel+NCARDEF-1)%NCARDEF; sndEnginePreview(carSel); hudTimer=0; }
+            else if(tx>=166){ carSel=(carSel+1)%NCARDEF; sndEnginePreview(carSel); hudTimer=0; }
         }
     } else {                                                         /* options */
         if(ty>=118&&ty<158){
@@ -3234,8 +3235,8 @@ static void menuInput(u32 down,int touched,int tx,int ty)
             else mapSel^=1;                                                                  /* 2 arenas */
         }
     } else if(menuScr==SC_CAR){
-        if(left)  carSel=(carSel+NCARDEF-1)%NCARDEF;
-        if(right) carSel=(carSel+1)%NCARDEF;
+        if(left)  { carSel=(carSel+NCARDEF-1)%NCARDEF; sndEnginePreview(carSel); }
+        if(right) { carSel=(carSel+1)%NCARDEF; sndEnginePreview(carSel); }
     } else {                                                         /* options: L / R = page, up / down = row, left / right = value */
         int rows=(optTab==0)?3:0;
         if(down&(KEY_L|KEY_R)){ optTab^=1; optSel=0; sndUi(0); hudTimer=0; }
@@ -3286,6 +3287,7 @@ static void gameFrame(u32 held,u32 down,int touched,int tx,int ty)
         menuInput(down,touched,tx,ty);
         if(state==ST_MENU){
             mapId=previewMap(); gmode=(mapId<2)?GM_DERBY:GM_RACE;
+            sndPreviewTick(carSel);
             if(cars[0].model!=carSel) initCar(&cars[0],0,0.0f,0.0f,menuSpin);
             menuSpin+=0.02f; cars[0].h=menuSpin; cars[0].sn=sinf(menuSpin); cars[0].cs=cosf(menuSpin);
             if(hudTimer--<=0){ hudUpdate(); hudTimer=5; hudStage=0; }
